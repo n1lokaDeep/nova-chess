@@ -355,12 +355,41 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/nova":
             board = _safe_board(data["fen"])
-            move = engine.choose_move(
-                board,
-                data["rating"], data["classical"], data["aggression"],
-                strictness=data.get("strictness", 0.6),
-                sharpness=data.get("sharpness", 3.0),
-            )
+            source = data.get("source", "nova")
+
+            if source == "sf" and engine.has_filter:
+                # Stockfish: берём его лучший ход
+                sf_depth = data.get("sfDepth")
+                pairs = engine.stockfish_moves(
+                    board, top=1,
+                    depth=int(sf_depth) if sf_depth else None,
+                )
+                move = chess.Move.from_uci(pairs[0][0]) if pairs else None
+
+            elif source == "maia":
+                maia = get_maia()
+                if maia is None:
+                    self._send(200, json.dumps({
+                        "error": "Maia-2 не установлена (pip install maia2)"
+                    }).encode())
+                    return
+                rating = int(data["rating"])
+                # Maia умеет семплировать — используем её выбор,
+                # чтобы партия не была каждый раз одинаковой
+                move = maia.sample_move(
+                    board, elo_self=rating,
+                    elo_oppo=int(data.get("oppoRating", rating)),
+                    sharpness=float(data.get("sharpness", 1.0)),
+                )
+
+            else:
+                move = engine.choose_move(
+                    board,
+                    data["rating"], data["classical"], data["aggression"],
+                    strictness=data.get("strictness"),
+                    sharpness=float(data.get("sharpness", 1.0)),
+                )
+
             if move is None:
                 self._send(200, json.dumps({"error": "нет ходов"}).encode())
                 return

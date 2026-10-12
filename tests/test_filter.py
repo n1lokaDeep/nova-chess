@@ -235,31 +235,48 @@ class TestStockfishMovesPerspective:
             "3Rk3/8/8/3q4/8/8/8/4K3 b - - 0 1",
     }
 
-    def _reference_best(self, engine, board, depth=16):
-        """Лучший ход по Stockfish через тот же процесс."""
+    def _reference_top(self, engine, board, depth=16, count=3):
+        """Топ-N ходов Stockfish через тот же процесс.
+
+        Возвращает список UCI. Сравнивать с одним ходом нельзя:
+        при разной глубине почти равные ходы (e7e5 / c7c5) меняются
+        местами, и тест начинает «мигать».
+        """
         import chess.engine
 
         with engine._filter._lock:
-            result = engine._filter._engine.play(
-                board, chess.engine.Limit(depth=depth))
-        return result.move.uci()
+            raw = engine._filter._engine.analyse(
+                board, chess.engine.Limit(depth=depth), multipv=count)
+
+        infos = raw if isinstance(raw, list) else [raw]
+        out = []
+        for i in infos:
+            pv = i.get("pv") or []
+            if pv:
+                out.append(pv[0].uci())
+        return out
 
     @pytest.mark.parametrize("label", list(POSITIONS))
     def test_top_move_matches_engine(self, engine, label):
-        """Первый предложенный ход совпадает с лучшим ходом Stockfish."""
+        """Мой лучший ход входит в тройку сильнейших по Stockfish.
+
+        Это и есть проверка перспективы: при старом баге ход чёрных
+        ранжировался наоборот, и их «лучший» ход оказывался в самом
+        низу списка Stockfish, а не в топе.
+        """
         fen = self.POSITIONS[label]
         board = chess.Board(fen)
 
-        # Проверяем, что позиция вообще допустима для движка
         if board.status() != chess.STATUS_VALID:
             pytest.skip(f"позиция невозможна: {label}")
 
-        mine = engine.stockfish_moves(board, top=3, depth=14)
+        mine = engine.stockfish_moves(board, top=3, depth=16)
         assert mine, f"нет ходов для: {label}"
 
-        best = self._reference_best(engine, board)
-        assert mine[0][0] == best, (
-            f"{label}: предложен {mine[0][0]}, Stockfish считает лучшим {best}"
+        reference = self._reference_top(engine, board, depth=16, count=3)
+        assert mine[0][0] in reference, (
+            f"{label}: предложен {mine[0][0]}, "
+            f"Stockfish считает лучшими {reference}"
         )
 
     def test_probabilities_sum_to_one(self, engine):

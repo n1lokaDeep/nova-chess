@@ -2,164 +2,340 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<title>Nova + Stockfish — шахматы</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Шахматный анализатор — Nova / Maia-2 / Stockfish</title>
 <style>
+  :root {
+    --bg:        #0f1115;
+    --surface:   #161920;
+    --surface-2: #1a1d24;
+    --line:      #262a33;
+    --line-2:    #333a47;
+    --text:      #e8eaed;
+    --muted:     #8b93a1;
+    --muted-2:   #6b7280;
+    --accent:    #7aa2f7;
+    --good:      #4ade80;
+    --warn:      #f0b429;
+    --bad:       #f87171;
+
+    --sq:        70px;          /* размер клетки */
+    --board:     560px;         /* 8 * 70 */
+    --board-brd: 2px;
+  }
+
   * { box-sizing: border-box; }
-  body { margin:0; background:#0f1115; color:#e8eaed; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
-  .app { display:flex; gap:20px; padding:20px; align-items:flex-start; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size: 14px;
+  }
 
-  /* ---------- доска ---------- */
-  .boardarea { display:flex; flex-direction:column; gap:8px; }
-  .playerbar { display:flex; align-items:center; gap:10px; background:#1a1d24;
-               border:1px solid #262a33; border-radius:8px; padding:9px 13px; }
-  .playerbar.active { border-color:#7aa2f7; background:#1b2333; }
-  .avatar { width:30px; height:30px; border-radius:6px; display:flex;
-            align-items:center; justify-content:center; font-size:17px; }
-  .avatar.w { background:#e8eaed; color:#111; }
-  .avatar.b { background:#33383f; color:#e8eaed; }
-  .pname { font-size:14px; font-weight:600; }
-  .ptype { font-size:11px; color:#8b93a1; }
-  .turn { font-size:11px; color:#7aa2f7; font-weight:700; margin-left:auto; }
+  .app { display: flex; gap: 20px; padding: 20px; align-items: flex-start;
+         justify-content: center; }
 
-  .boardwrap { position:relative; }
-  #board { display:grid; grid-template-columns:repeat(8,70px);
-           grid-template-rows:repeat(8,70px); border-radius:6px; overflow:hidden;
-           border:2px solid #262a33; }
-  .sq { position:relative; display:flex; align-items:center; justify-content:center;
-        font-size:46px; user-select:none; line-height:1; }
-  .lt { background:#e9edf2; }
-  .dk { background:#7d8ba1; }
-  .sq.movable { cursor:pointer; }
-  .sq.other { cursor:default; }
-  .sq.picked { box-shadow: inset 0 0 0 4px #f0b429; }
-  .sq.lastf  { background:#cdd6a0; }
-  .sq.lastt  { background:#c3cf8e; }
-  /* Стрелки подсказок рисуются SVG-слоем поверх доски */
-  #arrows { position:absolute; inset:0; pointer-events:none; z-index:5; }
-  .ar { stroke-linecap:round; stroke-linejoin:round; }
-  .sq.a1 { box-shadow: inset 0 0 0 3px rgba(74,222,128,.75); }
-  .sq.an { box-shadow: inset 0 0 0 3px rgba(122,162,247,.5); }
-  .pc.w { color:#fff; text-shadow:0 0 1px #000,0 1px 2px rgba(0,0,0,.65); }
-  .pc.b { color:#1b1f26; text-shadow:0 1px 1px rgba(255,255,255,.35); }
-  .badge { position:absolute; top:2px; left:3px; font-size:9px; font-weight:700;
-           color:#4b5563; background:rgba(255,255,255,.5); border-radius:3px; padding:0 3px; }
-  .badge.on-dark { color:#dfe5ec; background:rgba(0,0,0,.32); }
+  /* ================= доска ================= */
 
-  /* ---------- панель ---------- */
-  .panel { width:400px; min-width:340px; display:flex; flex-direction:column; gap:12px; }
-  .card { background:#161920; border:1px solid #262a33; border-radius:10px; padding:14px; }
-  .card h3 { margin:0 0 11px; font-size:13px; font-weight:600; color:#c3cad6; }
-  label { display:flex; justify-content:space-between; font-size:12px;
-          color:#8b93a1; margin:11px 0 5px; }
-  label b { color:#7aa2f7; }
-  input[type=range] { width:100%; accent-color:#7aa2f7; }
-  input[type=text] { width:100%; background:#1a1d24; color:#e8eaed;
-                     border:1px solid #333a47; border-radius:6px;
-                     padding:8px 10px; font-size:12px;
-                     font-family:ui-monospace,Consolas,monospace; }
-  input[type=text]:focus { outline:none; border-color:#7aa2f7; }
+  .boardarea { display: flex; flex-direction: column; gap: 10px; }
 
-  button { background:#232833; color:#e8eaed; border:1px solid #333a47;
-           border-radius:7px; padding:9px 13px; cursor:pointer; font-size:13px; }
-  button:hover:not(:disabled) { background:#2c3340; }
-  button:disabled { opacity:.4; cursor:default; }
-  button.pri { background:#7aa2f7; color:#0f1115; border-color:#7aa2f7; font-weight:700; }
-  .row { display:flex; gap:7px; flex-wrap:wrap; }
-  .row > button { flex:1; }
+  .playerbar {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 13px; transition: border-color .2s, background .2s;
+  }
+  .playerbar.active { border-color: var(--accent); background: #1b2333; }
+  .avatar { width: 32px; height: 32px; border-radius: 7px; display: flex;
+            align-items: center; justify-content: center; font-size: 19px;
+            font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", serif; }
+  .avatar.w { background: #eef1f5; color: #23272e; }
+  .avatar.b { background: #31363e; color: #eef1f5; }
+  .pname { font-size: 14px; font-weight: 600; }
+  .ptype { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .turn { font-size: 11px; color: var(--accent); font-weight: 700; margin-left: auto; }
 
-  .mv { display:flex; justify-content:space-between; align-items:center; gap:8px;
-        padding:7px 10px; border-radius:6px; background:#1e222b; margin-bottom:5px;
-        cursor:pointer; font-size:13px; }
-  .mv:hover { background:#262c37; }
-  .mv.top { background:#1f2d45; border:1px solid #7aa2f7; }
-  .mv .uci { font-family:ui-monospace,Consolas,monospace; font-weight:700; }
-  .mv .pct { color:#7aa2f7; font-weight:700; }
-  .mv .track { flex:1; height:5px; background:#2b313c; border-radius:3px; overflow:hidden; }
-  .mv .fill { height:100%; background:#7aa2f7; }
+  /* обёртка задаёт точные размеры: доска + рамка */
+  .boardwrap {
+    position: relative;
+    width:  calc(var(--board) + 2 * var(--board-brd));
+    height: calc(var(--board) + 2 * var(--board-brd));
+  }
 
-  #status { font-size:12px; color:#8b93a1; min-height:17px; }
-  .evalbar { display:flex; align-items:center; gap:9px; font-size:12px; color:#8b93a1; }
-  .evaltrack { flex:1; height:13px; background:#1b1f27; border-radius:7px;
-               overflow:hidden; display:flex; border:1px solid #262a33; }
-  .evalw { background:#dfe5ec; transition:width .25s; }
-  .evalb { background:#3a4150; transition:width .25s; }
-  #evalnum { width:56px; text-align:right; font-weight:700;
-             font-family:ui-monospace,monospace; color:#c3cad6; }
-  .hint { font-size:11px; color:#6b7280; line-height:1.55; }
+  #board {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(8, var(--sq));
+    grid-template-rows: repeat(8, var(--sq));
+    border: var(--board-brd) solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    user-select: none;
+  }
 
-  /* ---------- история ---------- */
-  #hist { max-height:130px; overflow-y:auto; font-family:ui-monospace,monospace;
-          font-size:12px; line-height:1.75; }
-  #hist span { display:inline-block; min-width:58px; color:#98a2b3; }
-  #hist b { color:#c3cad6; }
-  #overlay { position:absolute; inset:0; background:rgba(15,17,21,.9); display:none;
-             align-items:center; justify-content:center; flex-direction:column; gap:11px;
-             border-radius:6px; }
-  #overlay.show { display:flex; }
-  #spin { width:30px; height:30px; border:3px solid #2b313c; border-top-color:#7aa2f7;
-          border-radius:50%; animation:sp .7s linear infinite; }
-  @keyframes sp { to { transform:rotate(360deg); } }
+  .sq { position: relative; }
+  .lt { background: #e9edf2; }
+  .dk { background: #7d8ba1; }
+
+  .sq.movable { cursor: pointer; }
+  .sq.movable:hover { box-shadow: inset 0 0 0 3px rgba(240,180,41,.55); }
+  .sq.picked { box-shadow: inset 0 0 0 4px var(--warn); }
+  .sq.lastf, .sq.lastt { background: #cfd9a3; }
+  .sq.a1 { box-shadow: inset 0 0 0 3px rgba(74,222,128,.85); }
+  .sq.an { box-shadow: inset 0 0 0 2px rgba(122,162,247,.45); }
+  .sq.check { background: radial-gradient(circle, #f87171 0%, #e05a5a 70%); }
+
+  .badge {
+    position: absolute; top: 2px; left: 4px; font-size: 9px; font-weight: 700;
+    color: #4b5563; background: rgba(255,255,255,.5);
+    border-radius: 3px; padding: 0 3px; pointer-events: none;
+  }
+  .badge.on-dark { color: #eef1f5; background: rgba(0,0,0,.35); }
+
+  /* ---- слой фигур: абсолютное позиционирование + плавный переход ---- */
+  #pieces {
+    position: absolute;
+    top: calc(var(--board-brd)); left: calc(var(--board-brd));
+    width: var(--board); height: var(--board);
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  .piece {
+    position: absolute; top: 0; left: 0;
+    width: var(--sq); height: var(--sq);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 54px; line-height: 1;
+    font-family: "Segoe UI Symbol", "Noto Sans Symbols 2", "DejaVu Sans",
+                 "Arial Unicode MS", serif;
+    will-change: transform;
+    transition: transform .26s cubic-bezier(.22,.68,.36,1),
+                opacity .18s linear;
+  }
+  .piece.instant { transition: none; }
+
+  /* объёмный вид: заливка + обводка + тень */
+  .piece.w {
+    color: #ffffff;
+    -webkit-text-stroke: 2px #2b3037;
+    paint-order: stroke fill;
+    text-shadow: 0 3px 5px rgba(0,0,0,.38);
+  }
+  .piece.b {
+    color: #23272e;
+    -webkit-text-stroke: 2px #0d1014;
+    paint-order: stroke fill;
+    text-shadow: 0 2px 4px rgba(0,0,0,.45), 0 0 1px rgba(255,255,255,.25);
+  }
+
+  /* ---- стрелки подсказок ---- */
+  #arrows {
+    position: absolute;
+    top: calc(var(--board-brd)); left: calc(var(--board-brd));
+    width: var(--board); height: var(--board);
+    pointer-events: none;
+    z-index: 6;
+  }
+  .ar { stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---- оверлей «думаю» ---- */
+  #overlay {
+    position: absolute; inset: 0; border-radius: 8px; z-index: 10;
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 12px;
+    background: rgba(15,17,21,.66); backdrop-filter: blur(2px);
+  }
+  #overlay.show { display: flex; }
+  #spin {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 3px solid rgba(122,162,247,.25); border-top-color: var(--accent);
+    animation: sp .7s linear infinite;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #ovtext { font-size: 13px; color: var(--muted); }
+
+  /* ---- полоса оценки ---- */
+  .evalbar { display: flex; align-items: center; gap: 10px; font-size: 12px;
+             color: var(--muted); }
+  .evaltrack { flex: 1; height: 14px; background: #1b1f27; border-radius: 7px;
+               overflow: hidden; display: flex; border: 1px solid var(--line); }
+  .evalw { background: #e6eaef; transition: width .35s ease; }
+  .evalb { background: #3a4150; transition: width .35s ease; }
+  #evalnum { width: 58px; text-align: right; font-weight: 700;
+             font-family: ui-monospace, Consolas, monospace; color: #c3cad6; }
+
+  /* ================= панель ================= */
+
+  .panel { width: 410px; min-width: 350px; display: flex;
+           flex-direction: column; gap: 12px; }
+
+  .card { background: var(--surface); border: 1px solid var(--line);
+          border-radius: 10px; padding: 14px; }
+  .card h3 { margin: 0 0 11px; font-size: 13px; font-weight: 600;
+             color: #c3cad6; display: flex; justify-content: space-between;
+             align-items: center; }
+  .card h3 .tag { font-size: 10px; font-weight: 700; letter-spacing: .4px;
+                  text-transform: uppercase; color: var(--accent);
+                  background: rgba(122,162,247,.12); border-radius: 4px;
+                  padding: 2px 6px; }
+
+  label { display: flex; justify-content: space-between; font-size: 12px;
+          color: var(--muted); margin: 11px 0 5px; }
+  label:first-of-type { margin-top: 4px; }
+  label b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 0; }
+
+  input[type=text] {
+    width: 100%; background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--line-2); border-radius: 6px;
+    padding: 8px 10px; font-size: 12px;
+    font-family: ui-monospace, Consolas, monospace;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+
+  button {
+    background: #232833; color: var(--text); border: 1px solid var(--line-2);
+    border-radius: 7px; padding: 9px 13px; cursor: pointer; font-size: 13px;
+    font-family: inherit; transition: background .15s, border-color .15s;
+  }
+  button:hover:not(:disabled) { background: #2c3340; }
+  button:disabled { opacity: .4; cursor: default; }
+  button.pri { background: var(--accent); color: #0f1115;
+               border-color: var(--accent); font-weight: 700; }
+
+  .row { display: flex; gap: 7px; flex-wrap: wrap; }
+  .row > button { flex: 1; }
+
+  .hint { font-size: 11px; color: var(--muted-2); line-height: 1.55; margin-top: 7px; }
+  .hint b { color: var(--muted); }
+
+  /* ---- список ходов ---- */
+  .mv { display: flex; justify-content: space-between; align-items: center;
+        gap: 8px; padding: 7px 10px; border-radius: 6px;
+        background: #1e222b; margin-bottom: 5px; cursor: pointer; font-size: 13px;
+        transition: background .12s; }
+  .mv:hover { background: #262c37; }
+  .mv.top { background: #1f2d45; border: 1px solid var(--accent); }
+  .mv .uci { font-family: ui-monospace, Consolas, monospace; font-weight: 700;
+             min-width: 54px; }
+  .mv .pct { color: var(--accent); font-weight: 700; min-width: 50px;
+             text-align: right; font-variant-numeric: tabular-nums; }
+  .mv .track { flex: 1; height: 5px; background: #2b313c; border-radius: 3px;
+               overflow: hidden; }
+  .mv .fill { height: 100%; background: var(--accent); border-radius: 3px; }
+
+  /* ---- статус ---- */
+  #status { font-size: 12px; color: var(--muted); min-height: 17px; }
+  #status.err { color: var(--bad); }
+  #status.ok { color: var(--good); }
+
+  /* ---- история ---- */
+  #hist { font-size: 12px; line-height: 1.9; color: #aeb6c2;
+          font-family: ui-monospace, Consolas, monospace;
+          max-height: 118px; overflow-y: auto; }
+  #hist span { display: inline-block; min-width: 34px; color: #6b7280; }
+  #hist b { color: #dfe5ec; font-weight: 600; }
+  #hist::-webkit-scrollbar { width: 8px; }
+  #hist::-webkit-scrollbar-thumb { background: #2b313c; border-radius: 4px; }
+
+  /* ---- переключатель движка ---- */
+  .engineRow { display: flex; gap: 7px; }
+  .engineRow > button { flex: 1; padding: 10px 8px; font-weight: 600; }
 </style>
 </head>
 <body>
+
 <div class="app">
 
+  <!-- ================= ДОСКА ================= -->
   <div class="boardarea">
     <div class="playerbar" id="barTop">
-      <div class="avatar b">♚</div>
-      <div><div class="pname" id="topName">Чёрные</div>
-           <div class="ptype" id="topType">человек</div></div>
+      <div class="avatar b" id="avTop">♚</div>
+      <div>
+        <div class="pname" id="topName">Чёрные</div>
+        <div class="ptype" id="topType">человек</div>
+      </div>
       <div class="turn" id="topTurn"></div>
     </div>
 
     <div class="boardwrap">
       <div id="board"></div>
+      <div id="pieces"></div>
       <svg id="arrows" viewBox="0 0 560 560" preserveAspectRatio="none"></svg>
       <div id="overlay"><div id="spin"></div><div id="ovtext">думаю…</div></div>
     </div>
 
     <div class="playerbar active" id="barBot">
-      <div class="avatar w">♔</div>
-      <div><div class="pname" id="botName">Белые</div>
-           <div class="ptype" id="botType">человек</div></div>
+      <div class="avatar w" id="avBot">♔</div>
+      <div>
+        <div class="pname" id="botName">Белые</div>
+        <div class="ptype" id="botType">человек</div>
+      </div>
       <div class="turn" id="botTurn"></div>
     </div>
 
     <div class="evalbar card" style="padding:9px 13px">
       <span>Оценка</span>
-      <div class="evaltrack"><div class="evalw" id="evw" style="width:50%"></div>
-                             <div class="evalb" id="evb" style="width:50%"></div></div>
+      <div class="evaltrack">
+        <div class="evalw" id="evw" style="width:50%"></div>
+        <div class="evalb" id="evb" style="width:50%"></div>
+      </div>
       <span id="evalnum">0.0</span>
     </div>
   </div>
 
+  <!-- ================= ПАНЕЛЬ ================= -->
   <div class="panel">
-    <!-- Панель человека: видна только когда источник подсказок — Nova -->
-    <div class="card" id="panelHuman">
-      <h3>Профиль игрока</h3>
+
+    <!-- выбор движка -->
+    <div class="card">
+      <h3>Движок</h3>
+      <div class="engineRow">
+        <button id="srcNova" onclick="setSource('nova')">Nova</button>
+        <button id="srcMaia" onclick="setSource('maia')">Maia-2</button>
+        <button id="srcSF"   onclick="setSource('sf')">Stockfish</button>
+      </div>
+      <div class="hint" id="srcInfo"></div>
+    </div>
+
+    <!-- НАСТРОЙКИ: NOVA -->
+    <div class="card" id="panelNova">
+      <h3>Настройки Nova <span class="tag">люди</span></h3>
       <label>Рейтинг <b id="eloL">1500</b></label>
       <input type="range" id="elo" min="800" max="2700" step="50" value="1500">
-      <div class="hint" id="eloRange">Nova обучена на диапазоне 800–2700.</div>
       <label>Классика ↔ Гипермодерн <b id="clsL">0.50</b></label>
       <input type="range" id="cls" min="0" max="1" step="0.05" value="0.5">
       <label>Агрессия <b id="aggL">0.50</b></label>
       <input type="range" id="agg" min="0" max="1" step="0.05" value="0.5">
       <label>Фильтр качества <b id="strL">авто</b></label>
       <input type="range" id="str" min="-1" max="1" step="0.05" value="-1">
-      <div class="hint">Крайнее левое положение = <b>авто</b>: порог берётся
-        из рейтинга. На 800 зевки проходят, на 2700 отсеиваются.</div>
+      <div class="hint" id="novaHint">Крайнее левое положение = <b>авто</b>:
+        порог берётся из рейтинга. На 800 зевки проходят, на 2700 отсеиваются.</div>
     </div>
 
-    <!-- Панель Stockfish: он не зависит от рейтинга -->
+    <!-- НАСТРОЙКИ: MAIA -->
+    <div class="card" id="panelMaia" style="display:none">
+      <h3>Настройки Maia-2 <span class="tag">люди</span></h3>
+      <label>Рейтинг <b id="eloL2">1500</b></label>
+      <input type="range" id="elo2" min="1100" max="1900" step="50" value="1500">
+      <label>Рейтинг соперника <b id="oppoL">1500</b></label>
+      <input type="range" id="oppo" min="1100" max="1900" step="50" value="1500">
+      <div class="hint" id="maiaHint">Maia-2 обучена на диапазоне
+        <b>1100–1900</b> и учитывает рейтинг обоих игроков — поэтому ползунки
+        ограничены. Стиль и фильтр качества к ней не применяются.</div>
+    </div>
+
+    <!-- НАСТРОЙКИ: STOCKFISH -->
     <div class="card" id="panelSF" style="display:none">
-      <h3>Stockfish</h3>
+      <h3>Настройки Stockfish <span class="tag">сила</span></h3>
       <label>Глубина анализа <b id="sfdL">16</b></label>
-      <input type="range" id="sfd" min="8" max="24" step=2 value="16">
-      <div class="hint">Stockfish считает варианты и не зависит от рейтинга —
-        он всегда ищет объективно лучший ход. Больше глубина = сильнее,
-        но медленнее.</div>
+      <input type="range" id="sfd" min="8" max="24" step="2" value="16">
+      <div class="hint" id="sfHint">Stockfish считает варианты перебором и всегда
+        ищет объективно лучший ход. Он <b>не зависит от рейтинга</b> и стиля —
+        поэтому здесь только глубина. Больше глубина = сильнее, но медленнее.</div>
     </div>
 
+    <!-- кто играет -->
     <div class="card">
       <h3>Кто играет</h3>
       <div class="row">
@@ -171,11 +347,13 @@
       </div>
       <div class="hint">Движок ходит сам только если выбрана его сторона.
         Сейчас: <b id="whoPlays">человек за обе стороны</b></div>
-      <label>Разброс <b id="shpL">3.0</b></label>
+      <label>Разброс выбора <b id="shpL">3.0</b></label>
       <input type="range" id="shp" min="1" max="8" step="0.5" value="3">
-      <div class="hint">Больше — чаще играет самый вероятный ход.</div>
+      <div class="hint">Больше — чаще берётся самый вероятный ход.
+        Меньше — больше разнообразия.</div>
     </div>
 
+    <!-- позиция -->
     <div class="card">
       <h3>Позиция</h3>
       <input type="text" id="fenInput" spellcheck="false"
@@ -188,308 +366,270 @@
       <div class="hint" id="fenStatus">Вставь любую позицию в формате FEN.</div>
     </div>
 
-    <div class="card">
-      <h3>Источник подсказок</h3>
-      <div class="row">
-        <button id="srcNova" onclick="setSource('nova')">Nova</button>
-        <button id="srcMaia" onclick="setSource('maia')">Maia-2</button>
-        <button id="srcSF" onclick="setSource('sf')">Stockfish</button>
-      </div>
-      <div class="hint" id="srcInfo">Nova предсказывает ходы живых людей
-        твоего рейтинга. Stockfish считает объективно лучший ход.
-        Переключай и сравнивай — ответы расходятся.</div>
-    </div>
-
+    <!-- подсказки -->
     <div class="card">
       <h3>Подсказки на доске</h3>
+      <div class="row">
+        <button id="btnHint" onclick="toggleHints()">Подсказки: вкл</button>
+      </div>
       <label>Количество стрелок <b id="hnL">3</b></label>
       <input type="range" id="hn" min="1" max="5" step="1" value="3">
-      <div class="hint">Стрелки показывают ходы, которые чаще всего делают люди
-        твоего рейтинга. Зелёная — самый вероятный.</div>
+      <div class="hint">Зелёная стрелка — самый вероятный ход, синие — остальные.
+        Толщина зависит от вероятности.</div>
     </div>
 
+    <!-- ходы -->
     <div class="card">
-      <h3>Что сыграл бы человек</h3>
+      <h3 id="movesTitle">Ходы</h3>
       <div id="moves"></div>
     </div>
 
+    <!-- действия -->
     <div class="card">
       <div class="row">
-        <button class="pri" onclick="novaPlay()" id="btnNova">Ход Nova</button>
+        <button class="pri" onclick="enginePlay()" id="btnNova">Ход движка</button>
         <button onclick="undo()" id="btnUndo">Отменить</button>
         <button onclick="resetGame()">Заново</button>
       </div>
       <div class="row" style="margin-top:7px">
-        <button onclick="flip()">Перевернуть</button>
-        <button onclick="toggleHints()" id="btnHint">Подсказки: вкл</button>
+        <button onclick="flip()">Перевернуть доску</button>
       </div>
       <div id="status" style="margin-top:10px"></div>
     </div>
 
+    <!-- история -->
     <div class="card">
-      <h3>Партия</h3>
+      <h3>История партии</h3>
       <div id="hist"></div>
     </div>
+
   </div>
 </div>
 
 <script>
-const G = { p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚",
-            P:"♙",N:"♘",B:"♗",R:"♖",Q:"♕",K:"♔" };
+/* =====================================================================
+   Состояние
+   ===================================================================== */
+
 const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const SQ_PX = 70;
 
 let fen = START;
-let hist = [];            // UCI ходы
-let flipped = false;
-let picked = null;
-let legal = [];
-let moves = [];
-let showHints = true;
-let hintCount = 3;        // сколько стрелок рисовать (1–5)
-let moveSource = "nova";  // 'nova' — люди, 'sf' — Stockfish
-let novaSide = "n";       // 'w' | 'b' | 'n' (оба)
+let hist = [];            // сделанные ходы в UCI
+let legal = [];           // легальные ходы текущей позиции
+let moves = [];           // [[uci, вероятность], ...]
+let picked = null;        // выбранная клетка (индекс 0..63)
+let lastMove = null;      // последний ход UCI
+let turn = "w";
 let busy = false;
-let lastMove = null;
+let flipped = false;
+let novaSide = "n";       // 'w' | 'b' | 'n'
+let moveSource = "nova";
+let showHints = true;
+let hintCount = 3;
 
-/* элементы управления — объявлены сразу, используются ниже */
+/* =====================================================================
+   Описание движков — отсюда берутся все подписи,
+   чтобы при смене движка не оставалось упоминаний чужого
+   ===================================================================== */
+
+const ENGINES = {
+  nova: {
+    label: "Nova",
+    panel: "panelNova",
+    movesTitle: 'Что сыграл бы человек <span class="tag">Nova</span>',
+    info: "Nova обучена на 500 млн партий Lichess и предсказывает ходы "
+        + "живых людей рейтинга 800–2700. Разница между уровнями умеренная: "
+        + "в дебюте все играют теорию.",
+    ratingHint: "Nova обучена на диапазоне 800–2700.",
+    usesStyle: true,
+    usesFilter: true,
+    supportsAuto: true
+  },
+  maia: {
+    label: "Maia-2",
+    panel: "panelMaia",
+    movesTitle: 'Что сыграл бы человек <span class="tag">Maia-2</span>',
+    info: "Maia-2 обучена отдельно по рейтинговым диапазонам 1100–1900 и "
+        + "учитывает рейтинг обоих игроков. Разница между уровнями заметно "
+        + "сильнее, чем у Nova.",
+    ratingHint: "Maia-2 обучена только на 1100–1900.",
+    usesStyle: false,
+    usesFilter: false,
+    supportsAuto: false
+  },
+  sf: {
+    label: "Stockfish",
+    panel: "panelSF",
+    movesTitle: 'Ходы Stockfish <span class="tag">сила</span>',
+    info: "Stockfish 19 считает варианты перебором и всегда находит объективно "
+        + "лучший ход. Он не зависит от рейтинга, стиля и агрессии — "
+        + "поэтому таких ползунков здесь нет.",
+    ratingHint: "",
+    usesStyle: false,
+    usesFilter: false,
+    supportsAuto: false
+  }
+};
+
+/* =====================================================================
+   Элементы управления
+   ===================================================================== */
+
 const S = {
-  elo: document.getElementById("elo"),
-  cls: document.getElementById("cls"),
-  agg: document.getElementById("agg"),
-  str: document.getElementById("str"),
-  shp: document.getElementById("shp"),
-  hn:  document.getElementById("hn"),
-  sfd: document.getElementById("sfd"),
+  elo:  byId("elo"),
+  cls:  byId("cls"),
+  agg:  byId("agg"),
+  str:  byId("str"),
+  shp:  byId("shp"),
+  hn:   byId("hn"),
+  sfd:  byId("sfd"),
+  elo2: byId("elo2"),
+  oppo: byId("oppo")
 };
 const L = {
-  elo: document.getElementById("eloL"),
-  cls: document.getElementById("clsL"),
-  agg: document.getElementById("aggL"),
-  str: document.getElementById("strL"),
-  shp: document.getElementById("shpL"),
-  hn:  document.getElementById("hnL"),
-  sfd: document.getElementById("sfdL"),
+  elo:  byId("eloL"),
+  cls:  byId("clsL"),
+  agg:  byId("aggL"),
+  str:  byId("strL"),
+  shp:  byId("shpL"),
+  hn:   byId("hnL"),
+  sfd:  byId("sfdL"),
+  elo2: byId("eloL2"),
+  oppo: byId("oppoL")
 };
 
-/* -------- разбор FEN -------- */
+function byId(id) { return document.getElementById(id); }
+
+/* Текущий рейтинг берётся из ползунка активного движка */
+function currentRating() {
+  if (moveSource === "maia") return +S.elo2.value;
+  return +S.elo.value;
+}
+
+/* =====================================================================
+   Разбор и сборка FEN (нужно для мгновенных ходов без сервера)
+   ===================================================================== */
+
+const GLYPH = {           // сплошные начертания для обоих цветов
+  p: "♟", n: "♞", b: "♝", r: "♜", q: "♛", k: "♚"
+};
+
+function glyphFor(code) {
+  return GLYPH[code.toLowerCase()] || "";
+}
+
 function parseFen(f) {
   const rows = f.split(" ")[0].split("/");
-  const m = {};
-  rows.forEach((row, ri) => {
-    let fi = 0;
-    for (const ch of row) {
-      if (/\d/.test(ch)) fi += +ch;
-      else { m[(7 - ri) * 8 + fi] = ch; fi++; }
-    }
-  });
-  return m;
-}
-
-function sqName(sq) { return "abcdefgh"[sq % 8] + (Math.floor(sq / 8) + 1); }
-
-/* -------- отрисовка доски -------- */
-function render() {
-  const board = document.getElementById("board");
-  const pieces = parseFen(fen);
-  const turn = fen.split(" ")[1];
-  board.innerHTML = "";
-
-  const bestSet = {}, candSet = {};
-  if (showHints && moves.length) {
-    moves.slice(0, hintCount).forEach((mv, i) => {
-      const to = mv[0].slice(2, 4);
-      if (i === 0) bestSet[to] = 1; else candSet[to] = 1;
-    });
-  }
-
+  const out = {};                        // имя клетки -> символ фигуры
   for (let r = 0; r < 8; r++) {
-    for (let f = 0; f < 8; f++) {
-      const rank = flipped ? r : 7 - r;
-      const file = flipped ? 7 - f : f;
-      const sq = rank * 8 + file;
-      const name = sqName(sq);
-      const light = (rank + file) % 2 === 1;
-
-      const d = document.createElement("div");
-      d.className = "sq " + (light ? "lt" : "dk");
-
-      if (lastMove && (lastMove.slice(0,2) === name)) d.classList.add("lastf");
-      if (lastMove && (lastMove.slice(2,4) === name)) d.classList.add("lastt");
-
-      const p = pieces[sq];
-      if (p) {
-        const sp = document.createElement("span");
-        sp.className = "pc " + (p === p.toUpperCase() ? "w" : "b");
-        sp.textContent = G[p] || "";
-        d.appendChild(sp);
-        // можно ли взять эту фигуру
-        if (p === p.toUpperCase() === (turn === "w") && !busy) d.classList.add("movable");
-      }
-
-      if (picked === sq) d.classList.add("picked");
-      if (bestSet[name]) d.classList.add("a1");
-      else if (candSet[name]) d.classList.add("an");
-
-      // координаты
-      if (f === 0) {
-        const b = document.createElement("div");
-        b.className = "badge" + (light ? "" : " on-dark");
-        b.textContent = rank + 1;
-        d.appendChild(b);
-      }
-      if (r === 7) {
-        const b = document.createElement("div");
-        b.className = "badge" + (light ? "" : " on-dark");
-        b.style.left = "auto"; b.style.right = "3px";
-        b.textContent = "abcdefgh"[file];
-        d.appendChild(b);
-      }
-
-      d.onclick = () => onSquare(sq, name, p, turn);
-      board.appendChild(d);
+    let file = 0;
+    for (const ch of rows[r]) {
+      if (ch >= "1" && ch <= "8") { file += +ch; continue; }
+      const name = "abcdefgh"[file] + (8 - r);
+      out[name] = ch;
+      file++;
     }
   }
-
-  // полосы игроков
-  const topIsBlack = !flipped;
-  document.getElementById("topName").textContent = topIsBlack ? "Чёрные" : "Белые";
-  document.getElementById("botName").textContent = topIsBlack ? "Белые" : "Чёрные";
-  document.getElementById("topType").textContent = sideLabel(topIsBlack ? "b" : "w");
-  document.getElementById("botType").textContent = sideLabel(topIsBlack ? "w" : "b");
-  document.getElementById("topTurn").textContent = (turn === (topIsBlack ? "b" : "w")) ? "● ход" : "";
-  document.getElementById("botTurn").textContent = (turn === (topIsBlack ? "w" : "b")) ? "● ход" : "";
-  document.getElementById("barTop").classList.toggle("active", turn === (topIsBlack ? "b" : "w"));
-  document.getElementById("barBot").classList.toggle("active", turn === (topIsBlack ? "w" : "b"));
-
-  document.getElementById("btnNova").disabled = busy;
-  document.getElementById("btnUndo").disabled = busy || hist.length === 0;
-  renderHist();
-  drawArrows();
+  return out;
 }
 
-/* ---------- стрелки подсказок ---------- */
-
-const SQ_PX = 70;   // размер клетки в пикселях
-
-function centerOf(squareName) {
-  const fileIdx = "abcdefgh".indexOf(squareName[0]);
-  const rankIdx = parseInt(squareName[1], 10) - 1;
-  // если доска перевёрнута — координаты зеркалятся
-  const col = flipped ? 7 - fileIdx : fileIdx;
-  const row = flipped ? rankIdx : 7 - rankIdx;
-  return { x: col * SQ_PX + SQ_PX / 2, y: row * SQ_PX + SQ_PX / 2 };
+function squareName(idx) {
+  return "abcdefgh"[idx % 8] + (Math.floor(idx / 8) + 1);
 }
 
-function drawArrows() {
-  const svg = document.getElementById("arrows");
-  svg.innerHTML = "";
-  if (!showHints || !moves.length) return;
-
-  const count = Math.min(hintCount, moves.length);
-  const maxProb = moves[0][1] || 1;
-
-  // рисуем от слабых к сильным, чтобы главная стрелка была сверху
-  const slice = moves.slice(0, count).reverse();
-
-  slice.forEach((mv) => {
-    const uci = mv[0];
-    const prob = mv[1];
-    const isTop = uci === moves[0][0];
-
-    const from = centerOf(uci.slice(0, 2));
-    const to = centerOf(uci.slice(2, 4));
-
-    // укорачиваем линию, чтобы не залезать на фигуру
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const pad = 22;
-    const x1 = from.x + (dx / len) * pad;
-    const y1 = from.y + (dy / len) * pad;
-    const x2 = to.x - (dx / len) * pad;
-    const y2 = to.y - (dy / len) * pad;
-
-    const ratio = maxProb > 0 ? prob / maxProb : 1;
-    const width = isTop ? 9 : Math.max(4, 7 * ratio);
-
-    const color = isTop ? "#4ade80" : "#7aa2f7";
-    const opacity = isTop ? 0.95 : 0.35 + 0.45 * ratio;
-
-    // линия
-    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
-    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
-    line.setAttribute("stroke", color);
-    line.setAttribute("stroke-width", width);
-    line.setAttribute("opacity", opacity);
-    line.setAttribute("class", "ar");
-    svg.appendChild(line);
-
-    // наконечник — треугольник, повёрнутый по направлению
-    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
-    const headLen = isTop ? 26 : 20;
-    const headW = isTop ? 22 : 17;
-    const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
-    head.setAttribute("points",
-      `${x2},${y2} ${x2 - headLen},${y2 - headW / 2} ${x2 - headLen},${y2 + headW / 2}`);
-    head.setAttribute("fill", color);
-    head.setAttribute("opacity", opacity);
-    head.setAttribute("transform", `rotate(${angle} ${x2} ${y2})`);
-    head.setAttribute("class", "ar");
-    svg.appendChild(head);
-  });
-}
-
-function sideLabel(s) {
-  if (novaSide === "n") return "Nova играет";
-  return novaSide === s ? "Nova играет" : "ты играешь";
-}
-
-function renderHist() {
-  const el = document.getElementById("hist");
-  el.innerHTML = "";
-  for (let i = 0; i < hist.length; i += 2) {
-    const n = i / 2 + 1;
-    const w = hist[i], b = hist[i+1] || "";
-    el.innerHTML += `<span>${n}.</span><b>${w}</b> ${b ? "<b>"+b+"</b>" : ""} &nbsp;`;
+function expandRow(row) {
+  const out = [];
+  for (const ch of row) {
+    if (ch >= "1" && ch <= "8") for (let i = 0; i < +ch; i++) out.push(null);
+    else out.push(ch);
   }
-  el.scrollTop = el.scrollHeight;
+  return out;
 }
 
-/* -------- клик по полю -------- */
-function onSquare(sq, name, piece, turn) {
-  if (busy) return;
-  if (novaSide === turn) {
-    document.getElementById("status").textContent =
-      "Сейчас ход Nova (" + (turn === "w" ? "белые" : "чёрные") + ")";
-    return;
+function boardToFen(board, rest) {
+  return board.map(row => {
+    let s = "", empty = 0;
+    for (const sq of row) {
+      if (sq === null) empty++;
+      else { if (empty) { s += empty; empty = 0; } s += sq; }
+    }
+    if (empty) s += empty;
+    return s;
+  }).join("/") + " " + rest;
+}
+
+/* Применяет ход локально — доска реагирует мгновенно,
+   без ожидания сервера и без пересчёта Stockfish. */
+function applyMoveLocal(fenStr, uci) {
+  const parts = fenStr.split(" ");
+  const rows = parts[0].split("/");
+  const board = rows.map(expandRow);
+
+  const ff = uci.charCodeAt(0) - 97, fr = 8 - +uci[1];
+  const tf = uci.charCodeAt(2) - 97, tr = 8 - +uci[3];
+  const promo = uci[4];
+
+  const piece = board[fr][ff];
+  if (!piece) return null;
+
+  const white = piece === piece.toUpperCase();
+  if (white !== (parts[1] === "w")) return null;
+
+  const isPawn = piece.toLowerCase() === "p";
+  const isKing = piece.toLowerCase() === "k";
+  const isRook = piece.toLowerCase() === "r";
+  const captured = board[tr][tf];
+
+  // взятие на проходе: пешка уходит по диагонали на пустое поле,
+  // а взятая пешка стоит рядом по той же горизонтали
+  if (isPawn && ff !== tf && !captured) {
+    board[fr][tf] = null;
   }
 
-  if (picked === null) {
-    if (!piece) return;
-    const own = piece === piece.toUpperCase() ? "w" : "b";
-    if (own !== turn) return;
-    picked = sq;
-    render();
-    return;
+  board[fr][ff] = null;
+  board[tr][tf] = promo
+    ? (white ? promo.toUpperCase() : promo.toLowerCase())
+    : piece;
+
+  // рокировка — перемещаем ладью
+  if (isKing && Math.abs(tf - ff) === 2) {
+    if (tf > ff) { board[tr][5] = board[tr][7]; board[tr][7] = null; }
+    else         { board[tr][3] = board[tr][0]; board[tr][0] = null; }
   }
 
-  const from = sqName(picked);
-  let mv = from + name;
-  if (legal.includes(mv)) { doMove(mv); return; }
-  if (legal.includes(mv + "q")) { doMove(mv + "q"); return; }
-
-  if (piece) {
-    const own = piece === piece.toUpperCase() ? "w" : "b";
-    if (own === turn) { picked = sq; render(); return; }
+  let castling = parts[2];
+  const drop = c => { castling = castling.replace(c, ""); };
+  if (isKing) { if (white) { drop("K"); drop("Q"); } else { drop("k"); drop("q"); } }
+  if (isRook) {
+    if (white) { if (uci.slice(0, 2) === "a1") drop("Q"); if (uci.slice(0, 2) === "h1") drop("K"); }
+    else       { if (uci.slice(0, 2) === "a8") drop("q"); if (uci.slice(0, 2) === "h8") drop("k"); }
   }
-  picked = null;
-  render();
+  if (castling === "") castling = "-";
+
+  let ep = "-";
+  if (isPawn && Math.abs(tr - fr) === 2) {
+    ep = "abcdefgh"[tf] + (white ? "3" : "6");
+  }
+
+  const halfmove = (isPawn || captured) ? 0 : (+parts[4] || 0) + 1;
+  const fullmove = parts[1] === "b" ? (+parts[5] || 1) + 1 : (+parts[5] || 1);
+  const next = parts[1] === "w" ? "b" : "w";
+
+  return {
+    fen: boardToFen(board, [next, castling, ep, halfmove, fullmove].join(" ")),
+    capture: !!captured
+  };
 }
 
-/* -------- сеть -------- */
-function showStatus(text) {
-  const el = document.getElementById("status");
-  if (el) el.textContent = text;
+/* =====================================================================
+   Сеть
+   ===================================================================== */
+
+function setStatus(text, kind) {
+  const el = byId("status");
+  el.textContent = text || "";
+  el.className = kind || "";
 }
 
 async function post(url, body) {
@@ -501,47 +641,387 @@ async function post(url, body) {
   return r.json();
 }
 
-function params() {
-  const rawStrict = +S.str.value;
+function params(extra) {
+  const eng = ENGINES[moveSource];
   const p = {
     fen,
-    rating: +S.elo.value,
-    classical: +S.cls.value,
-    aggression: +S.agg.value,
-    strictness: rawStrict < 0 ? null : rawStrict,
+    rating: currentRating(),
+    classical: eng.usesStyle ? +S.cls.value : 0.5,
+    aggression: eng.usesStyle ? +S.agg.value : 0.5,
     sharpness: +S.shp.value,
     source: moveSource
   };
-  if (moveSource === "sf" && S.sfd) {
+
+  if (eng.usesFilter) {
+    const raw = +S.str.value;
+    p.strictness = raw < 0 ? null : raw;      // null = авто из рейтинга
+  }
+  if (moveSource === "maia") {
+    p.oppoRating = +S.oppo.value;
+  }
+  if (moveSource === "sf") {
     p.sfDepth = +S.sfd.value;
   }
-  return p;
+  return Object.assign(p, extra || {});
 }
 
-async function refresh(opts = {}) {
-  const p = params();
-  if (opts.fast) p.wantEval = false;
+/* =====================================================================
+   Отрисовка доски
+   ===================================================================== */
 
+function squareToXY(name) {
+  const f = name.charCodeAt(0) - 97;
+  const r = +name[1] - 1;
+  const col = flipped ? 7 - f : f;
+  const row = flipped ? r : 7 - r;
+  return { x: col * SQ_PX, y: row * SQ_PX };
+}
+
+function squareDistance(a, b) {
+  const ax = a.charCodeAt(0) - 97, ay = +a[1];
+  const bx = b.charCodeAt(0) - 97, by = +b[1];
+  return Math.abs(ax - bx) + Math.abs(ay - by);
+}
+
+/* --- слой фигур: сопоставляем фигуры между позициями,
+       чтобы одинаковые элементы плавно переезжали, а не пересоздавались --- */
+
+let pieceEls = {};    // id -> element
+let pieceState = {};  // id -> {code, square}
+let nextPieceId = 1;
+
+function renderPieces(instant) {
+  const layer = byId("pieces");
+  const target = parseFen(fen);
+
+  const oldEntries = Object.entries(pieceState);
+  const used = new Set();
+  const assigned = {};          // клетка -> id
+
+  // 1) совпало и место, и фигура — ничего не двигаем
+  for (const sq in target) {
+    for (const [id, st] of oldEntries) {
+      if (used.has(id)) continue;
+      if (st.square === sq && st.code === target[sq]) {
+        assigned[sq] = id; used.add(id); break;
+      }
+    }
+  }
+
+  // 2) та же фигура, другое место — переезд (обычный ход, взятие, рокировка)
+  for (const sq in target) {
+    if (assigned[sq]) continue;
+    const code = target[sq];
+    let best = null, bestDist = Infinity;
+    for (const [id, st] of oldEntries) {
+      if (used.has(id) || st.code !== code) continue;
+      const d = squareDistance(st.square, sq);
+      if (d < bestDist) { bestDist = d; best = id; }
+    }
+    if (best !== null) { assigned[sq] = best; used.add(best); }
+  }
+
+  // 3) превращение пешки: элемент сохраняем, меняем начертание
+  for (const sq in target) {
+    if (assigned[sq]) continue;
+    const code = target[sq];
+    if (code.toLowerCase() === "p") continue;
+    for (const [id, st] of oldEntries) {
+      if (used.has(id) || st.code.toLowerCase() !== "p") continue;
+      if (squareDistance(st.square, sq) > 2) continue;
+      assigned[sq] = id; used.add(id); break;
+    }
+  }
+
+  // 4) оставшиеся — новые фигуры
+  for (const sq in target) {
+    if (!assigned[sq]) assigned[sq] = "n" + (nextPieceId++);
+  }
+
+  const newState = {};
+
+  for (const sq in assigned) {
+    const id = assigned[sq];
+    const code = target[sq];
+    const isWhite = code === code.toUpperCase();
+    const cls = "piece " + (isWhite ? "w" : "b");
+    const { x, y } = squareToXY(sq);
+
+    let el = pieceEls[id];
+
+    if (!el) {
+      el = document.createElement("div");
+      el.className = cls + " instant";
+      el.textContent = glyphFor(code);
+      el.style.transform = `translate(${x}px, ${y}px)`;
+      layer.appendChild(el);
+      // принудительный reflow, затем включаем переход —
+      // иначе новая фигура «прилетит» из левого верхнего угла
+      void el.offsetWidth;
+      el.classList.remove("instant");
+      pieceEls[id] = el;
+    } else {
+      if (el.className !== cls) el.className = cls;
+      const g = glyphFor(code);
+      if (el.textContent !== g) el.textContent = g;
+      if (instant) el.classList.add("instant");
+      el.style.transform = `translate(${x}px, ${y}px)`;
+      if (instant) { void el.offsetWidth; el.classList.remove("instant"); }
+    }
+
+    newState[id] = { code, square: sq };
+  }
+
+  // удаляем исчезнувшие (взятые) фигуры
+  for (const id in pieceEls) {
+    if (newState[id]) continue;
+    const el = pieceEls[id];
+    if (instant) {
+      el.remove();
+    } else {
+      el.style.opacity = "0";
+      setTimeout(() => el.remove(), 200);
+    }
+    delete pieceEls[id];
+  }
+
+  pieceState = newState;
+}
+
+function render(instant) {
+  const board = byId("board");
+  const target = parseFen(fen);
+
+  const bestSet = {}, candSet = {};
+  if (showHints && moves.length) {
+    moves.slice(0, hintCount).forEach((mv, i) => {
+      const to = mv[0].slice(2, 4);
+      if (i === 0) bestSet[to] = 1; else candSet[to] = 1;
+    });
+  }
+
+  board.innerHTML = "";
+
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const rank = flipped ? r : 7 - r;
+      const file = flipped ? 7 - f : f;
+      const name = "abcdefgh"[file] + (rank + 1);
+      const light = (rank + file) % 2 === 1;
+
+      const d = document.createElement("div");
+      d.className = "sq " + (light ? "lt" : "dk");
+
+      if (lastMove) {
+        if (lastMove.slice(0, 2) === name) d.classList.add("lastf");
+        if (lastMove.slice(2, 4) === name) d.classList.add("lastt");
+      }
+
+      const piece = target[name];
+      if (piece && piece.toLowerCase() === "k") {
+        const white = piece === piece.toUpperCase();
+        if (white === (turn === "w") && inCheck) d.classList.add("check");
+      }
+
+      if (picked === name) d.classList.add("picked");
+      if (bestSet[name]) d.classList.add("a1");
+      else if (candSet[name]) d.classList.add("an");
+
+      // можно ли сюда пойти выбранной фигурой
+      if (picked && legal.includes(picked + name)) d.classList.add("movable");
+
+      if (f === 0) {
+        const b = document.createElement("div");
+        b.className = "badge" + (light ? "" : " on-dark");
+        b.textContent = rank + 1;
+        d.appendChild(b);
+      }
+      if (r === 7) {
+        const b = document.createElement("div");
+        b.className = "badge" + (light ? "" : " on-dark");
+        b.style.left = "auto"; b.style.right = "4px";
+        b.textContent = "abcdefgh"[file];
+        d.appendChild(b);
+      }
+
+      d.onclick = () => onSquare(name);
+      board.appendChild(d);
+    }
+  }
+
+  renderPieces(instant);
+
+  // полосы игроков
+  const topIsBlack = !flipped;
+  byId("topName").textContent = topIsBlack ? "Чёрные" : "Белые";
+  byId("botName").textContent = topIsBlack ? "Белые" : "Чёрные";
+  byId("topType").textContent = sideLabel(topIsBlack ? "b" : "w");
+  byId("botType").textContent = sideLabel(topIsBlack ? "w" : "b");
+  byId("avTop").textContent = topIsBlack ? "♚" : "♔";
+  byId("avBot").textContent = topIsBlack ? "♔" : "♚";
+  byId("avTop").className = "avatar " + (topIsBlack ? "b" : "w");
+  byId("avBot").className = "avatar " + (topIsBlack ? "w" : "b");
+
+  const topTurn = topIsBlack ? "b" : "w";
+  const botTurn = topIsBlack ? "w" : "b";
+  byId("topTurn").textContent = turn === topTurn ? "● ход" : "";
+  byId("botTurn").textContent = turn === botTurn ? "● ход" : "";
+  byId("barTop").classList.toggle("active", turn === topTurn);
+  byId("barBot").classList.toggle("active", turn === botTurn);
+
+  byId("btnNova").disabled = busy;
+  byId("btnUndo").disabled = busy || hist.length === 0;
+
+  renderHist();
+  drawArrows();
+}
+
+function sideLabel(side) {
+  if (novaSide === "n") return "ты играешь";
+  return novaSide === side ? ENGINES[moveSource].label + " играет" : "ты играешь";
+}
+
+/* =====================================================================
+   Стрелки подсказок
+   ===================================================================== */
+
+function drawArrows() {
+  const svg = byId("arrows");
+  svg.innerHTML = "";
+  if (!showHints || !moves.length) return;
+
+  const count = Math.min(hintCount, moves.length);
+  const maxProb = moves[0][1] || 1;
+
+  moves.slice(0, count).reverse().forEach(mv => {
+    const uci = mv[0], prob = mv[1];
+    const isTop = uci === moves[0][0];
+
+    const from = squareToXY(uci.slice(0, 2));
+    const to = squareToXY(uci.slice(2, 4));
+
+    const x1c = from.x + SQ_PX / 2, y1c = from.y + SQ_PX / 2;
+    const x2c = to.x + SQ_PX / 2,   y2c = to.y + SQ_PX / 2;
+
+    const dx = x2c - x1c, dy = y2c - y1c;
+    const len = Math.hypot(dx, dy) || 1;
+    const pad = 24;
+
+    const x1 = x1c + (dx / len) * pad, y1 = y1c + (dy / len) * pad;
+    const x2 = x2c - (dx / len) * pad, y2 = y2c - (dy / len) * pad;
+
+    const ratio = maxProb > 0 ? prob / maxProb : 1;
+    const width = isTop ? 9 : Math.max(4, 7 * ratio);
+    const color = isTop ? "#4ade80" : "#7aa2f7";
+    const opacity = isTop ? 0.95 : 0.35 + 0.45 * ratio;
+
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.setAttribute("stroke", color);
+    line.setAttribute("stroke-width", width);
+    line.setAttribute("opacity", opacity);
+    line.setAttribute("class", "ar");
+    svg.appendChild(line);
+
+    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    const headLen = isTop ? 26 : 20;
+    const headW = isTop ? 22 : 17;
+
+    const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    head.setAttribute("points",
+      `${x2},${y2} ${x2 - headLen},${y2 - headW / 2} ${x2 - headLen},${y2 + headW / 2}`);
+    head.setAttribute("fill", color);
+    head.setAttribute("opacity", opacity);
+    head.setAttribute("transform", `rotate(${angle} ${x2} ${y2})`);
+    head.setAttribute("class", "ar");
+    svg.appendChild(head);
+  });
+}
+
+/* =====================================================================
+   Список ходов, оценка, история
+   ===================================================================== */
+
+function drawMoves() {
+  const box = byId("moves");
+  box.innerHTML = "";
+  if (!moves.length) {
+    box.innerHTML = '<div class="hint">нет данных</div>';
+    return;
+  }
+
+  const mx = moves[0][1] || 1;
+  moves.forEach((mv, i) => {
+    const d = document.createElement("div");
+    d.className = "mv" + (i === 0 ? " top" : "");
+    const pct = (mv[1] * 100).toFixed(1);
+    d.innerHTML =
+      `<span class="uci">${mv[0]}</span>` +
+      `<div class="track"><div class="fill" style="width:${(mv[1] / mx * 100).toFixed(0)}%"></div></div>` +
+      `<span class="pct">${pct}%</span>`;
+    d.onclick = () => { if (!busy) doMove(mv[0]); };
+    box.appendChild(d);
+  });
+}
+
+function drawEval(cp) {
+  const pct = 50 + Math.max(-50, Math.min(50, cp / 12));
+  byId("evw").style.width = pct + "%";
+  byId("evb").style.width = (100 - pct) + "%";
+  const abs = Math.abs(cp);
+  let text;
+  if (abs >= 1400) text = (cp > 0 ? "+M" : "−M");
+  else text = (cp > 0 ? "+" : cp < 0 ? "−" : "") + (abs / 100).toFixed(1);
+  byId("evalnum").textContent = text;
+}
+
+function renderHist() {
+  const el = byId("hist");
+  if (!hist.length) { el.innerHTML = '<span class="hint">партия не начата</span>'; return; }
+
+  let out = "";
+  for (let i = 0; i < hist.length; i += 2) {
+    const n = i / 2 + 1;
+    const w = hist[i], b = hist[i + 1];
+    out += `<span>${n}.</span><b>${w || ""}</b> ${b ? "<b>" + b + "</b>" : ""} &nbsp; `;
+  }
+  el.innerHTML = out;
+  el.scrollTop = el.scrollHeight;
+}
+
+/* =====================================================================
+   Обновление с сервера
+   ===================================================================== */
+
+let inCheck = false;
+
+async function refresh(opts) {
+  opts = opts || {};
   let j;
   try {
-    j = await post("/api/state", p);
+    j = await post("/api/state", params(opts.fast ? { wantEval: false } : null));
   } catch (e) {
-    showStatus("сервер не отвечает: " + e);
+    setStatus("сервер не отвечает: " + e.message, "err");
     return null;
   }
 
-  if (j.error) { showStatus(j.error); return j; }
+  if (!j || j.error) {
+    setStatus((j && j.error) || "неизвестная ошибка", "err");
+    return j;
+  }
 
   legal = j.legal || [];
   moves = j.moves || [];
   turn = j.turn || fen.split(" ")[1];
+  inCheck = !!j.check;
 
   if (j.over) {
-    showStatus("Партия окончена. Результат: " + j.reason);
+    setStatus("Партия окончена. Результат: " + j.reason, "ok");
   } else {
     const who = turn === "w" ? "белые" : "чёрные";
-    showStatus("Ход " + who + (j.check ? " — ШАХ!" : "") +
-      "   ·   подсказок: " + moves.length);
+    setStatus("Ход " + who + (inCheck ? " — ШАХ!" : "") +
+              "   ·   подсказок: " + moves.length);
   }
 
   drawMoves();
@@ -550,281 +1030,228 @@ async function refresh(opts = {}) {
   return j;
 }
 
-function drawMoves() {
-  const box = document.getElementById("moves");
-  box.innerHTML = "";
-  if (!moves.length) { box.innerHTML = '<div class="hint">нет данных</div>'; return; }
-  const mx = moves[0][1] || 1;
-  moves.forEach((mv, i) => {
-    const d = document.createElement("div");
-    d.className = "mv" + (i === 0 ? " top" : "");
-    d.innerHTML = `<span class="uci">${mv[0]}</span>
-                   <div class="track"><div class="fill" style="width:${(mv[1]/mx*100).toFixed(0)}%"></div></div>
-                   <span class="pct">${(mv[1]*100).toFixed(1)}%</span>`;
-    d.onclick = () => { if (!busy) doMove(mv[0]); };
-    box.appendChild(d);
-  });
-}
+/* =====================================================================
+   Ходы
+   ===================================================================== */
 
-function drawEval(cp) {
-  let pct = 50 + Math.max(-50, Math.min(50, cp / 10));
-  document.getElementById("evw").style.width = pct + "%";
-  document.getElementById("evb").style.width = (100 - pct) + "%";
-  const v = (cp / 100).toFixed(1);
-  document.getElementById("evalnum").textContent = (cp > 0 ? "+" : "") + v;
-}
+function onSquare(name) {
+  if (busy) return;
+  const target = parseFen(fen);
 
-/* -------- локальные ходы (без сервера) -------- */
-
-/* Применяет ход к FEN прямо в браузере. Это убирает задержку:
-   раньше каждый ход ждал два запроса к серверу, каждый из которых
-   прогонял Stockfish. Теперь доска реагирует мгновенно,
-   а сервер вызывается только за новыми подсказками. */
-
-function expandFenRow(row) {
-  const out = [];
-  for (const ch of row) {
-    if (ch >= "1" && ch <= "8") {
-      for (let i = 0; i < +ch; i++) out.push(null);
-    } else {
-      out.push(ch);
+  // клик по фигуре — выбираем её
+  if (target[name]) {
+    const white = target[name] === target[name].toUpperCase();
+    if (white === (turn === "w")) {
+      picked = (picked === name) ? null : name;
+      render();
+      return;
     }
   }
-  return out;
-}
 
-function parseFenBoard(f) {
-  const rows = f.split(" ")[0].split("/");
-  const board = [];
-  for (let r = 0; r < 8; r++) board.push(expandFenRow(rows[r]));
-  return board;   // board[0] — 8-й ряд
-}
-
-function boardToFen(board, rest) {
-  return board.map(row => {
-    let s = "", empty = 0;
-    for (const sq of row) {
-      if (sq === null) { empty++; }
-      else { if (empty) { s += empty; empty = 0; } s += sq; }
+  // клик по полю — пробуем сходить
+  if (picked) {
+    const uci = picked + name;
+    if (legal.includes(uci) || legal.includes(uci + "q")) {
+      const full = legal.includes(uci) ? uci : uci + "q";
+      doMove(full);
+      return;
     }
-    if (empty) s += empty;
-    return s;
-  }).join("/") + " " + rest;
+  }
+
+  picked = null;
+  render();
 }
 
-function fileOf(name) { return name.charCodeAt(0) - 97; }
-function rankOf(name) { return +name[1] - 1; }
-
-function chessMoveLocal(fenStr, uci) {
-  const parts = fenStr.split(" ");
-  const board = parseFenBoard(fenStr);
-  const from = uci.slice(0, 2), to = uci.slice(2, 4), promo = uci[4];
-
-  const fr = 7 - rankOf(from), ff = fileOf(from);
-  const tr = 7 - rankOf(to),   tf = fileOf(to);
-
-  const piece = board[fr][ff];
-  if (!piece) return null;
-
-  const target = board[tr][tf];
-  const isPawn = piece.toLowerCase() === "p";
-  const isKing = piece.toLowerCase() === "k";
-  const isRook = piece.toLowerCase() === "r";
-  const white = piece === piece.toUpperCase();
-
-  // проверка очереди хода
-  if (white !== (parts[1] === "w")) return null;
-
-  board[fr][ff] = null;
-  board[tr][tf] = promo
-    ? (white ? promo.toUpperCase() : promo.toLowerCase())
-    : piece;
-
-  // рокировка — двигаем ладью
-  let castling = parts[2];
-  if (isKing && Math.abs(tf - ff) === 2) {
-    if (tf > ff) { board[tr][5] = board[tr][7]; board[tr][7] = null; }
-    else         { board[tr][3] = board[tr][0]; board[tr][0] = null; }
-  }
-
-  // обновляем права рокировки
-  const remove = c => { castling = castling.replace(c, ""); };
-  if (isKing) { if (white) { remove("K"); remove("Q"); } else { remove("k"); remove("q"); } }
-  if (isRook) {
-    if (white) { if (from === "a1") remove("Q"); if (from === "h1") remove("K"); }
-    else       { if (from === "a8") remove("q"); if (from === "h8") remove("k"); }
-  }
-  if (castling === "") castling = "-";
-
-  // взятие на проходе
-  let ep = "-";
-  if (isPawn && Math.abs(tr - fr) === 2) {
-    ep = "abcdefgh"[tf] + (white ? "3" : "6");
-  }
-
-  // счётчик полуходов и номер хода
-  const halfmove = (isPawn || target) ? 0 : (+parts[4] || 0) + 1;
-  const fullmove = parts[1] === "b" ? (+parts[5] || 1) + 1 : (+parts[5] || 1);
-  const nextTurn = parts[1] === "w" ? "b" : "w";
-
-  return {
-    fen: boardToFen(board, [nextTurn, castling, ep, halfmove, fullmove].join(" ")),
-    capture: !!target,
-    piece
-  };
-}
 async function doMove(uci) {
   if (busy) return;
+
+  const res = applyMoveLocal(fen, uci);
+  if (!res) { setStatus("нелегальный ход", "err"); return; }
+
   busy = true;
-
-  // Ход применяется МГНОВЕННО на клиенте, без ожидания сервера.
-  // Раньше здесь было два последовательных запроса (/api/play и /api/state),
-  // каждый из которых считал Stockfish — отсюда ощущение «пинга 9000».
-  const mv = chessMoveLocal(fen, uci);
-  if (!mv) {
-    document.getElementById("status").textContent = "нелегальный ход";
-    busy = false;
-    return;
-  }
-
   hist.push(uci);
-  fen = mv.fen;
+  fen = res.fen;
   lastMove = uci;
   picked = null;
   turn = fen.split(" ")[1];
+  moves = [];              // стрелки от прошлой позиции сразу убираем
 
-  render();                     // доска обновляется сразу
-  showStatus("ход сделан, считаю подсказки…");
+  render();                // доска и фигуры обновляются мгновенно
+  setStatus("ход сделан, считаю подсказки…");
 
-  busy = false;                 // человек снова может ходить
-  await refresh();              // подсказки подтягиваются фоном
-  maybeAutoNova();
+  busy = false;
+  await refresh();
+  maybeAutoEngine();
+}
+
+async function enginePlay() {
+  if (busy) return;
+  busy = true;
+
+  byId("overlay").classList.add("show");
+  byId("ovtext").textContent = ENGINES[moveSource].label + " думает…";
+  render();
+
+  try {
+    const j = await post("/api/nova", params());
+    if (j.error) {
+      setStatus(j.error, "err");
+    } else {
+      const res = applyMoveLocal(fen, j.move);
+      if (res) {
+        hist.push(j.move);
+        fen = res.fen;
+        lastMove = j.move;
+        picked = null;
+        turn = fen.split(" ")[1];
+        moves = [];
+      }
+    }
+    await refresh();
+  } catch (e) {
+    setStatus("ошибка: " + e.message, "err");
+  }
+
+  byId("overlay").classList.remove("show");
+  busy = false;
+  render();
 }
 
 async function undo() {
   if (busy || !hist.length) return;
-  const steps = (novaSide === "n") ? 1 : Math.min(2, hist.length);
-  for (let i = 0; i < steps; i++) hist.pop();
+  hist.pop();
   const j = await post("/api/replay", { history: hist });
-  fen = j.fen;
+  fen = j.fen || START;
   lastMove = hist.length ? hist[hist.length - 1] : null;
   picked = null;
+  moves = [];
   await refresh();
+  render(true);            // без анимации — позиция заменяется целиком
 }
 
-/* -------- Nova -------- */
-async function novaPlay() {
-  if (busy) return;
-  busy = true;
-  document.getElementById("overlay").classList.add("show");
-  document.getElementById("ovtext").textContent = "Nova думает…";
-  render();
-  try {
-    const j = await post("/api/nova", params());
-    if (j.error) { document.getElementById("status").textContent = j.error; }
-    else {
-      hist.push(j.move);
-      fen = j.fen;
-      lastMove = j.move;
-      picked = null;
-    }
-    await refresh();
-  } catch (e) {
-    document.getElementById("status").textContent = "ошибка: " + e;
-  }
-  busy = false;
-  document.getElementById("overlay").classList.remove("show");
-  render();
-}
-
-/* Nova ходит ТОЛЬКО когда её сторона выбрана явно.
-   Режим "n" (оба сами) убран: по умолчанию человек ходит за обе стороны
-   и сам жмёт «Ход Nova», когда захочет. */
-function maybeAutoNova() {
-  if (novaSide === "n") return;              // оба — человек
-  const turn = fen.split(" ")[1];
-  if (novaSide === turn) {
-    setTimeout(novaPlay, 180);
-  }
-}
-
-/* -------- управление -------- */
 function resetGame() {
   if (busy) return;
-  fen = START; hist = []; picked = null; lastMove = null;
-  refresh().then(maybeAutoNova);
+  fen = START; hist = []; picked = null; lastMove = null; moves = []; legal = [];
+  turn = "w"; inCheck = false;
+
+  // полная перерисовка слоя фигур
+  const layer = byId("pieces");
+  layer.innerHTML = "";
+  pieceEls = {}; pieceState = {};
+
+  render(true);
+  refresh().then(maybeAutoEngine);
 }
 
-function flip() { flipped = !flipped; render(); }
+function flip() {
+  flipped = !flipped;
+  render();                // фигуры переезжают плавно
+}
 
 function toggleHints() {
   showHints = !showHints;
-  document.getElementById("btnHint").textContent = "Подсказки: " + (showHints ? "вкл" : "выкл");
+  byId("btnHint").textContent = "Подсказки: " + (showHints ? "вкл" : "выкл");
   render();
+}
+
+function maybeAutoEngine() {
+  if (novaSide === "n") return;
+  if (novaSide === turn) setTimeout(enginePlay, 160);
 }
 
 function setSide(s) {
   novaSide = s;
-  ["sideW","sideB","sideN"].forEach(id => document.getElementById(id).classList.remove("pri"));
-  document.getElementById(s === "w" ? "sideW" : s === "b" ? "sideB" : "sideN").classList.add("pri");
+  ["sideW", "sideB", "sideN"].forEach(id => byId(id).classList.remove("pri"));
+  byId(s === "w" ? "sideW" : s === "b" ? "sideB" : "sideN").classList.add("pri");
 
-  const who = document.getElementById("whoPlays");
-  if (who) {
-    who.textContent = s === "n" ? "человек за обе стороны"
-                    : s === "w" ? "Nova играет белыми"
-                    : "Nova играет чёрными";
-  }
+  byId("whoPlays").textContent =
+    s === "n" ? "человек за обе стороны" :
+    s === "w" ? ENGINES[moveSource].label + " играет белыми" :
+                ENGINES[moveSource].label + " играет чёрными";
 
   render();
-  maybeAutoNova();
+  maybeAutoEngine();
 }
 
-/* -------- ползунки -------- */
+/* =====================================================================
+   Переключение движка — меняет панели, подписи и подсказки
+   ===================================================================== */
+
+function setSource(src) {
+  moveSource = src;
+  const eng = ENGINES[src];
+
+  ["srcNova", "srcMaia", "srcSF"].forEach(id => byId(id).classList.remove("pri"));
+  byId(src === "nova" ? "srcNova" : src === "maia" ? "srcMaia" : "srcSF")
+    .classList.add("pri");
+
+  // показываем только панель выбранного движка — чужих настроек нет
+  ["panelNova", "panelMaia", "panelSF"].forEach(id => {
+    byId(id).style.display = (id === eng.panel) ? "" : "none";
+  });
+
+  // подписи без упоминаний других движков
+  byId("srcInfo").textContent = eng.info;
+  byId("movesTitle").innerHTML = eng.movesTitle;
+
+  byId("whoPlays").textContent =
+    novaSide === "n" ? "человек за обе стороны" :
+    novaSide === "w" ? eng.label + " играет белыми" :
+                       eng.label + " играет чёрными";
+
+  syncLabels();
+  refresh();
+}
+
+/* =====================================================================
+   Ползунки
+   ===================================================================== */
+
 let refreshTimer = null;
 
 function syncLabels() {
   L.elo.textContent = S.elo.value;
+  L.elo2.textContent = S.elo2.value;
+  L.oppo.textContent = S.oppo.value;
   L.cls.textContent = (+S.cls.value).toFixed(2);
   L.agg.textContent = (+S.agg.value).toFixed(2);
   L.shp.textContent = (+S.shp.value).toFixed(1);
   L.hn.textContent = S.hn.value;
+  L.sfd.textContent = S.sfd.value;
 
-  const rawStrict = +S.str.value;
-  L.str.textContent = rawStrict < 0 ? "авто" : rawStrict.toFixed(2);
-  if (L.sfd && S.sfd) L.sfd.textContent = S.sfd.value;
+  const raw = +S.str.value;
+  L.str.textContent = raw < 0 ? "авто" : raw.toFixed(2);
 }
 
 function bindSliders() {
   Object.values(S).forEach(el => {
+    if (!el) return;
     el.addEventListener("input", () => {
       syncLabels();
 
-      // количество стрелок меняется мгновенно, без запроса к серверу
-      if (el === S.hn) {
-        hintCount = +S.hn.value;
-        render();
-        return;
-      }
+      // число стрелок меняется сразу, без похода на сервер
+      if (el === S.hn) { hintCount = +S.hn.value; render(); return; }
 
       clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => { if (!busy) refresh(); }, 260);
+      refreshTimer = setTimeout(() => { if (!busy) refresh(); }, 240);
     });
   });
 }
 
-/* -------- загрузка позиции -------- */
+/* =====================================================================
+   Позиция: загрузка FEN
+   ===================================================================== */
 
-function setFenStatus(text, ok = true) {
-  const el = document.getElementById("fenStatus");
+function setFenStatus(text, ok) {
+  const el = byId("fenStatus");
   el.textContent = text;
-  el.style.color = ok ? "#6b7280" : "#f87171";
+  el.style.color = ok === false ? "var(--bad)" : "var(--muted-2)";
 }
 
 async function loadFen() {
-  const raw = document.getElementById("fenInput").value.trim();
+  const raw = byId("fenInput").value.trim();
   if (!raw) { setFenStatus("Введи FEN", false); return; }
 
-  // Валидируем через отдельный эндпоинт — он только проверяет позицию
   let check;
   try {
     check = await post("/api/validate", { fen: raw });
@@ -834,92 +1261,53 @@ async function loadFen() {
   }
 
   if (!check || !check.ok) {
-    setFenStatus("Ошибка FEN: " + ((check && check.error) || "не удалось разобрать"), false);
+    setFenStatus("Ошибка FEN: " + ((check && check.error) || "не разобрать"), false);
     return;
   }
 
-  fen = check.fen;          // нормализованный FEN от сервера
+  // новая позиция — сбрасываем историю и слой фигур
+  const layer = byId("pieces");
+  layer.innerHTML = "";
+  pieceEls = {}; pieceState = {};
+
+  fen = check.fen;
   hist = [];
   picked = null;
   lastMove = null;
-  await refresh();
+  moves = [];
+
   setFenStatus("Позиция загружена. Ход: " +
     (fen.split(" ")[1] === "w" ? "белые" : "чёрные") +
-    ", ходов доступно: " + check.legalCount);
-  maybeAutoNova();
+    ", доступно ходов: " + check.legalCount);
+
+  render(true);
+  await refresh();
+  maybeAutoEngine();
 }
 
 function copyCurrentFen() {
-  const inp = document.getElementById("fenInput");
-  inp.value = fen;
+  byId("fenInput").value = fen;
   setFenStatus("Текущая позиция вставлена в поле");
 }
 
 async function loadFromClipboard() {
   try {
     const text = await navigator.clipboard.readText();
-    document.getElementById("fenInput").value = text.trim();
+    byId("fenInput").value = text.trim();
     setFenStatus("Вставлено из буфера — жми «Загрузить»");
   } catch (e) {
     setFenStatus("Браузер не дал доступ к буферу — вставь вручную (Ctrl+V)", false);
   }
 }
 
-/* -------- источник подсказок -------- */
+/* =====================================================================
+   Старт
+   ===================================================================== */
 
-function setSource(src) {
-  moveSource = src;
-  ["srcNova", "srcMaia", "srcSF"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove("pri");
-  });
-  const btn = document.getElementById(
-    src === "nova" ? "srcNova" : src === "maia" ? "srcMaia" : "srcSF");
-  if (btn) btn.classList.add("pri");
-
-  // Панель человека нужна только для человеческих движков.
-  // Stockfish не зависит от рейтинга и стиля.
-  const humanSource = (src === "nova" || src === "maia");
-  document.getElementById("panelHuman").style.display = humanSource ? "" : "none";
-  document.getElementById("panelSF").style.display = (src === "sf") ? "" : "none";
-
-  const info = document.getElementById("srcInfo");
-  const rangeHint = document.getElementById("eloRange");
-  const eloSlider = document.getElementById("elo");
-
-  if (src === "nova") {
-    info.textContent = "Nova: обучена на 500 млн партий Lichess, "
-      + "предсказывает ходы людей. Разница между уровнями умеренная.";
-    eloSlider.min = 800; eloSlider.max = 2700;
-    if (rangeHint) rangeHint.textContent = "Nova обучена на диапазоне 800–2700.";
-  } else if (src === "maia") {
-    info.textContent = "Maia-2: обучена по рейтинговым диапазонам, "
-      + "разница между уровнями выражена сильнее, чем у Nova.";
-    // Maia-2 работает только в этом диапазоне — ограничиваем ползунок,
-    // чтобы нельзя было выставить рейтинг, который она не умеет
-    eloSlider.min = 1100; eloSlider.max = 1900;
-    if (+eloSlider.value > 1900) eloSlider.value = "1900";
-    if (+eloSlider.value < 1100) eloSlider.value = "1100";
-    if (rangeHint) {
-      rangeHint.textContent = "Maia-2 обучена только на 1100–1900. "
-        + "Ползунок ограничен этим диапазоном.";
-    }
-  } else {
-    info.textContent = "Stockfish: считает варианты и всегда ищет объективно "
-      + "лучший ход. Рейтинг на него не влияет.";
-    eloSlider.min = 800; eloSlider.max = 2700;
-  }
-
-  syncLabels();
-  refresh();
-}
-
-/* -------- старт -------- */
 bindSliders();
 syncLabels();
 setSide("n");
 setSource("nova");
-refresh().then(maybeAutoNova);
 </script>
 </body>
 </html>
