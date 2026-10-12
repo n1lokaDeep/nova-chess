@@ -34,10 +34,11 @@
   .sq.picked { box-shadow: inset 0 0 0 4px #f0b429; }
   .sq.lastf  { background:#cdd6a0; }
   .sq.lastt  { background:#c3cf8e; }
-  .sq.best::after { content:""; position:absolute; inset:6px; border-radius:50%;
-                    background:rgba(74,222,128,.55); }
-  .sq.cand::after { content:""; position:absolute; inset:16px; border-radius:50%;
-                    background:rgba(122,162,247,.55); }
+  /* Стрелки подсказок рисуются SVG-слоем поверх доски */
+  #arrows { position:absolute; inset:0; pointer-events:none; z-index:5; }
+  .ar { stroke-linecap:round; stroke-linejoin:round; }
+  .sq.a1 { box-shadow: inset 0 0 0 3px rgba(74,222,128,.75); }
+  .sq.an { box-shadow: inset 0 0 0 3px rgba(122,162,247,.5); }
   .pc.w { color:#fff; text-shadow:0 0 1px #000,0 1px 2px rgba(0,0,0,.65); }
   .pc.b { color:#1b1f26; text-shadow:0 1px 1px rgba(255,255,255,.35); }
   .badge { position:absolute; top:2px; left:3px; font-size:9px; font-weight:700;
@@ -108,6 +109,7 @@
 
     <div class="boardwrap">
       <div id="board"></div>
+      <svg id="arrows" viewBox="0 0 560 560" preserveAspectRatio="none"></svg>
       <div id="overlay"><div id="spin"></div><div id="ovtext">думаю…</div></div>
     </div>
 
@@ -138,12 +140,16 @@
     </div>
 
     <div class="card">
-      <h3>За кого играет Nova</h3>
+      <h3>Кто играет</h3>
       <div class="row">
-        <button id="sideW" onclick="setSide('w')">Белые</button>
-        <button id="sideB" onclick="setSide('b')">Чёрные</button>
-        <button id="sideN" onclick="setSide('n')">Оба сами</button>
+        <button id="sideN" onclick="setSide('n')">Человек за обе</button>
       </div>
+      <div class="row" style="margin-top:7px">
+        <button id="sideW" onclick="setSide('w')">Nova: белые</button>
+        <button id="sideB" onclick="setSide('b')">Nova: чёрные</button>
+      </div>
+      <div class="hint">Нова ходит сама только если выбрана её сторона.
+        Сейчас: <b id="whoPlays">человек за обе стороны</b></div>
       <label>Фильтр качества (Stockfish) <b id="strL">0.60</b></label>
       <input type="range" id="str" min="0" max="1" step="0.05" value="0.6">
       <div class="hint">0 — чистая Nova, играет ровно как человек, но может зевнуть.
@@ -151,6 +157,14 @@
       <label>Разброс <b id="shpL">3.0</b></label>
       <input type="range" id="shp" min="1" max="8" step="0.5" value="3">
       <div class="hint">Больше — чаще играет самый вероятный человеческий ход.</div>
+    </div>
+
+    <div class="card">
+      <h3>Подсказки на доске</h3>
+      <label>Количество стрелок <b id="hnL">3</b></label>
+      <input type="range" id="hn" min="1" max="5" step="1" value="3">
+      <div class="hint">Стрелки показывают ходы, которые чаще всего делают люди
+        твоего рейтинга. Зелёная — самый вероятный.</div>
     </div>
 
     <div class="card">
@@ -190,6 +204,7 @@ let picked = null;
 let legal = [];
 let moves = [];
 let showHints = true;
+let hintCount = 3;        // сколько стрелок рисовать (1–5)
 let novaSide = "n";       // 'w' | 'b' | 'n' (оба)
 let busy = false;
 let lastMove = null;
@@ -201,6 +216,7 @@ const S = {
   agg: document.getElementById("agg"),
   str: document.getElementById("str"),
   shp: document.getElementById("shp"),
+  hn:  document.getElementById("hn"),
 };
 const L = {
   elo: document.getElementById("eloL"),
@@ -208,6 +224,7 @@ const L = {
   agg: document.getElementById("aggL"),
   str: document.getElementById("strL"),
   shp: document.getElementById("shpL"),
+  hn:  document.getElementById("hnL"),
 };
 
 /* -------- разбор FEN -------- */
@@ -235,7 +252,7 @@ function render() {
 
   const bestSet = {}, candSet = {};
   if (showHints && moves.length) {
-    moves.slice(0, 4).forEach((mv, i) => {
+    moves.slice(0, hintCount).forEach((mv, i) => {
       const to = mv[0].slice(2, 4);
       if (i === 0) bestSet[to] = 1; else candSet[to] = 1;
     });
@@ -266,8 +283,8 @@ function render() {
       }
 
       if (picked === sq) d.classList.add("picked");
-      if (bestSet[name]) d.classList.add("best");
-      else if (candSet[name]) d.classList.add("cand");
+      if (bestSet[name]) d.classList.add("a1");
+      else if (candSet[name]) d.classList.add("an");
 
       // координаты
       if (f === 0) {
@@ -303,6 +320,79 @@ function render() {
   document.getElementById("btnNova").disabled = busy;
   document.getElementById("btnUndo").disabled = busy || hist.length === 0;
   renderHist();
+  drawArrows();
+}
+
+/* ---------- стрелки подсказок ---------- */
+
+const SQ_PX = 70;   // размер клетки в пикселях
+
+function centerOf(squareName) {
+  const fileIdx = "abcdefgh".indexOf(squareName[0]);
+  const rankIdx = parseInt(squareName[1], 10) - 1;
+  // если доска перевёрнута — координаты зеркалятся
+  const col = flipped ? 7 - fileIdx : fileIdx;
+  const row = flipped ? rankIdx : 7 - rankIdx;
+  return { x: col * SQ_PX + SQ_PX / 2, y: row * SQ_PX + SQ_PX / 2 };
+}
+
+function drawArrows() {
+  const svg = document.getElementById("arrows");
+  svg.innerHTML = "";
+  if (!showHints || !moves.length) return;
+
+  const count = Math.min(hintCount, moves.length);
+  const maxProb = moves[0][1] || 1;
+
+  // рисуем от слабых к сильным, чтобы главная стрелка была сверху
+  const slice = moves.slice(0, count).reverse();
+
+  slice.forEach((mv) => {
+    const uci = mv[0];
+    const prob = mv[1];
+    const isTop = uci === moves[0][0];
+
+    const from = centerOf(uci.slice(0, 2));
+    const to = centerOf(uci.slice(2, 4));
+
+    // укорачиваем линию, чтобы не залезать на фигуру
+    const dx = to.x - from.x, dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const pad = 22;
+    const x1 = from.x + (dx / len) * pad;
+    const y1 = from.y + (dy / len) * pad;
+    const x2 = to.x - (dx / len) * pad;
+    const y2 = to.y - (dy / len) * pad;
+
+    const ratio = maxProb > 0 ? prob / maxProb : 1;
+    const width = isTop ? 9 : Math.max(4, 7 * ratio);
+
+    const color = isTop ? "#4ade80" : "#7aa2f7";
+    const opacity = isTop ? 0.95 : 0.35 + 0.45 * ratio;
+
+    // линия
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+    line.setAttribute("stroke", color);
+    line.setAttribute("stroke-width", width);
+    line.setAttribute("opacity", opacity);
+    line.setAttribute("class", "ar");
+    svg.appendChild(line);
+
+    // наконечник — треугольник, повёрнутый по направлению
+    const angle = Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI;
+    const headLen = isTop ? 26 : 20;
+    const headW = isTop ? 22 : 17;
+    const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+    head.setAttribute("points",
+      `${x2},${y2} ${x2 - headLen},${y2 - headW / 2} ${x2 - headLen},${y2 + headW / 2}`);
+    head.setAttribute("fill", color);
+    head.setAttribute("opacity", opacity);
+    head.setAttribute("transform", `rotate(${angle} ${x2} ${y2})`);
+    head.setAttribute("class", "ar");
+    svg.appendChild(head);
+  });
 }
 
 function sideLabel(s) {
@@ -467,9 +557,13 @@ async function novaPlay() {
   render();
 }
 
+/* Nova ходит ТОЛЬКО когда её сторона выбрана явно.
+   Режим "n" (оба сами) убран: по умолчанию человек ходит за обе стороны
+   и сам жмёт «Ход Nova», когда захочет. */
 function maybeAutoNova() {
+  if (novaSide === "n") return;              // оба — человек
   const turn = fen.split(" ")[1];
-  if (novaSide === "n" || novaSide === turn) {
+  if (novaSide === turn) {
     setTimeout(novaPlay, 180);
   }
 }
@@ -493,6 +587,14 @@ function setSide(s) {
   novaSide = s;
   ["sideW","sideB","sideN"].forEach(id => document.getElementById(id).classList.remove("pri"));
   document.getElementById(s === "w" ? "sideW" : s === "b" ? "sideB" : "sideN").classList.add("pri");
+
+  const who = document.getElementById("whoPlays");
+  if (who) {
+    who.textContent = s === "n" ? "человек за обе стороны"
+                    : s === "w" ? "Nova играет белыми"
+                    : "Nova играет чёрными";
+  }
+
   render();
   maybeAutoNova();
 }
@@ -506,12 +608,21 @@ function syncLabels() {
   L.agg.textContent = (+S.agg.value).toFixed(2);
   L.str.textContent = (+S.str.value).toFixed(2);
   L.shp.textContent = (+S.shp.value).toFixed(1);
+  L.hn.textContent = S.hn.value;
 }
 
 function bindSliders() {
   Object.values(S).forEach(el => {
     el.addEventListener("input", () => {
       syncLabels();
+
+      // количество стрелок меняется мгновенно, без запроса к серверу
+      if (el === S.hn) {
+        hintCount = +S.hn.value;
+        render();
+        return;
+      }
+
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => { if (!busy) refresh(); }, 260);
     });
