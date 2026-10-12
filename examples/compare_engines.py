@@ -7,7 +7,8 @@
 
 Пример:
     python examples/compare_engines.py
-    python examples/compare_engines.py --fen "r1bqkb1r/ppp2ppp/2n2n2/3pp1b1/3P4/2N1B2N/PPP2PPP/R2QKB1R w KQkq - 0 6"
+    python examples/compare_engines.py --fen "<FEN>"
+    python examples/compare_engines.py --top 5
 
 Maia-2 необязательна: если пакет не установлен, сравнение идёт
 только по Nova, и об этом сообщается.
@@ -109,7 +110,7 @@ def main() -> int:
     except ImportError:
         print("  Maia-2 не установлена — сравнение пропущено.")
         print("  Установка: pip install maia2")
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"  Maia-2 недоступна: {exc}")
 
     # ---- Вывод ----

@@ -41,6 +41,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install ruff
+
+      - name: Линтер
+        # Стиль и подозрительные конструкции проверяем до тестов:
+        # так ошибка видна раньше и понятнее
+        run: ruff check .
 
       - name: Тесты
         # Тесты, требующие модель Nova или Stockfish, пропускаются сами:

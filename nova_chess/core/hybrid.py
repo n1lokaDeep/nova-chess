@@ -234,7 +234,9 @@ class HumanLikeEngine:
 
         return [
             (uci, w / total)
-            for (uci, _), w in zip(scored, weights)
+            # strict=True: списки обязаны совпадать по длине, иначе
+            # молча потеряем ход — лучше сразу увидеть ошибку
+            for (uci, _), w in zip(scored, weights, strict=True)
         ]
 
     def evaluate_position(self, board: chess.Board, depth: int | None = None) -> int:
@@ -296,7 +298,7 @@ class HumanLikeEngine:
         if self._filter is not None:
             self._filter.close()
 
-    def __enter__(self) -> "HumanLikeEngine":
+    def __enter__(self) -> HumanLikeEngine:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

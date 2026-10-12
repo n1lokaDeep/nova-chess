@@ -1,6 +1,8 @@
 ﻿import sys
+
 sys.path.insert(0, r"C:\Users\Orion\Projects\nova-chess")
 import chess
+
 from nova_chess.core.maia import MaiaEngine
 
 print("Загружаю Maia-2...")

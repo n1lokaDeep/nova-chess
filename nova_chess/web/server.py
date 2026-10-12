@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import threading
@@ -100,10 +101,9 @@ def restart_engine() -> None:
     global _engine
     with _lock:
         if _engine is not None:
-            try:
+            # старый движок мог уже упасть — это не мешает поднять новый
+            with contextlib.suppress(Exception):
                 _engine.close()
-            except Exception:
-                pass
         _engine = HumanLikeEngine(
             DEFAULT_MODEL,
             STOCKFISH if STOCKFISH and Path(STOCKFISH).exists() else None,
@@ -155,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
 
     protocol_version = "HTTP/1.1"
 
-    def log_message(self, *args) -> None:  # noqa: D102
+    def log_message(self, *args) -> None:
         pass
 
     def _send(self, code: int, body: bytes, ctype: str = "application/json") -> None:
@@ -166,7 +166,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path in ("/", "/index.html"):
             if UI_FILE.exists():
                 # charset=utf-8 обязателен: файл в UTF-8 без BOM,
@@ -184,7 +184,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, b"{}")
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         length = int(self.headers.get("Content-Length", 0))
         try:
             data = json.loads(self.rfile.read(length) or b"{}")
@@ -194,7 +194,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             self._route(data)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._send(200, json.dumps({"error": str(exc)}).encode())
 
     def _route(self, data: dict) -> None:
@@ -209,7 +209,7 @@ class Handler(BaseHTTPRequestHandler):
                     restart_engine()
                 engine = get_engine()
                 self._dispatch(engine, path, data)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 msg = str(exc)
                 # Смерть движка лечится перезапуском, а не отдачей мусора
                 if "event loop" in msg or "Terminated" in msg or "died" in msg:
@@ -217,7 +217,7 @@ class Handler(BaseHTTPRequestHandler):
                         restart_engine()
                         self._dispatch(get_engine(), path, data)
                         return
-                    except Exception as retry_exc:  # noqa: BLE001
+                    except Exception as retry_exc:
                         msg = f"движок перезапущен, но снова упал: {retry_exc}"
                 self._send(200, json.dumps({"error": msg}).encode())
 

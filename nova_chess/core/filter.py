@@ -14,6 +14,7 @@ Nova не оценивает позиции и не считает вариан�
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -77,7 +78,7 @@ def loss_budget(strictness: float) -> int:
     """
     s = max(0.0, min(1.0, strictness))
     # Квадратичная интерполяция вместо линейной
-    return int(round(MAX_LOSS_AT_ZERO + (MAX_LOSS_AT_ONE - MAX_LOSS_AT_ZERO) * (s ** 0.5)))
+    return round(MAX_LOSS_AT_ZERO + (MAX_LOSS_AT_ONE - MAX_LOSS_AT_ZERO) * (s ** 0.5))
 
 
 @dataclass(frozen=True)
@@ -101,7 +102,8 @@ def _score_to_cp(score: chess.engine.Score, perspective: chess.Color) -> int:
     if pov.is_mate():
         mate_in = pov.mate()
         # Чем быстрее мат, тем выше оценка
-        return MATE_SCORE - abs(mate_in) * MATE_STEP if mate_in > 0 else -MATE_SCORE + abs(mate_in) * MATE_STEP
+        magnitude = MATE_SCORE - abs(mate_in) * MATE_STEP
+        return magnitude if mate_in > 0 else -magnitude
     return pov.score() or 0
 
 
@@ -180,13 +182,28 @@ class StockfishFilter:
         self, board: chess.Board, candidates: list[tuple[str, float]],
         depth: int | None = None,
     ) -> list[EvaluatedMove]:
-        """Оценивает список кандидатов и считает потерю относительно лучшего."""
+        """Оценивает список кандидатов и считает потерю относительно лучшего.
+
+        Ошибки различаются по смыслу: некорректный ход просто пропускается,
+        а падение движка поднимается наверх. Раньше любая ошибка молча
+        съедалась, и вызывающий код не мог отличить «нет ходов» от
+        «Stockfish умер».
+
+        Raises:
+            RuntimeError: если движок перестал отвечать.
+        """
         scored: list[tuple[str, float, int]] = []
+
         for uci, probability in candidates:
             try:
                 cp = self.evaluate_move(board, uci, depth)
-            except Exception:
+            except ValueError:
+                # ход не разбирается — это вопрос данных, не движка
                 continue
+            except chess.engine.EngineError as exc:
+                raise RuntimeError(
+                    f"Stockfish не отвечает: {exc}. Возможно, процесс упал."
+                ) from exc
             scored.append((uci, probability, cp))
 
         if not scored:
@@ -234,13 +251,11 @@ class StockfishFilter:
 
     def close(self) -> None:
         """Останавливает процесс Stockfish."""
-        with self._lock:
-            try:
-                self._engine.quit()
-            except Exception:
-                pass
+        # движок мог уже умереть — гасить повторно не страшно
+        with self._lock, contextlib.suppress(Exception):
+            self._engine.quit()
 
-    def __enter__(self) -> "StockfishFilter":
+    def __enter__(self) -> StockfishFilter:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

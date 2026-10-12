@@ -3,7 +3,7 @@ CLI для Nova Chess.
 
 Примеры:
     # позиция из FEN — что сыграл бы человек
-    python -m nova_chess.cli moves --fen "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1" --rating 1500
+    python -m nova_chess.cli moves --rating 1500
 
     # ход движка с фильтром качества
     python -m nova_chess.cli play --rating 1800 --strictness 0.7
@@ -139,8 +139,9 @@ def cmd_selfplay(args: argparse.Namespace) -> int:
     white = (args.rating, args.classical, args.aggression)
     black = (args.rating2 or args.rating, args.classical, args.aggression)
 
+    played = 0
     try:
-        for ply in range(args.moves):
+        for _ in range(args.moves):
             if board.is_game_over():
                 break
             params = white if board.turn == chess.WHITE else black
@@ -151,6 +152,7 @@ def cmd_selfplay(args: argparse.Namespace) -> int:
                 break
             san = board.san(move)
             board.push(move)
+            played += 1
             number = board.fullmove_number
             prefix = f"{number}." if board.turn == chess.BLACK else f"{number}..."
             print(f"{prefix} {san}")
@@ -159,7 +161,7 @@ def cmd_selfplay(args: argparse.Namespace) -> int:
         if board.is_game_over():
             print(f"Результат: {board.result()} — {board.outcome().termination.name}")
         else:
-            print(f"Остановлено на {ply if 'ply' in dir() else args.moves} полуходов")
+            print(f"Остановлено на {played} полуходов")
     finally:
         engine.close()
     return 0
@@ -179,7 +181,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub = parser.add_subparsers(dest="command", required=True)
 
-    common = dict()
     for name, func, helptext in (
         ("moves", cmd_moves, "Ходы, которые сделал бы человек"),
         ("play", cmd_play, "Один ход движка"),

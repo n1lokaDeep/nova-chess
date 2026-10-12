@@ -4,9 +4,11 @@
 невозможные позиции, на которых Stockfish падает.
 """
 import sys
+
 sys.path.insert(0, r"C:\Users\Orion\Projects\nova-chess")
 import chess
 import chess.engine
+
 from nova_chess.core import HumanLikeEngine
 from nova_chess.core.filter import _score_to_cp
 

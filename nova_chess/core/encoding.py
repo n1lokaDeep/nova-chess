@@ -78,7 +78,7 @@ def fen_to_planes(fen: str) -> np.ndarray:
     return planes
 
 
-def normalize_rating(rating: int | float) -> float:
+def normalize_rating(rating: float) -> float:
     """Нормализует рейтинг в диапазон [0, 1] так, как это делает Nova.
 
     Модель обучена на диапазоне 800–2700; значения вне его обрезаются.

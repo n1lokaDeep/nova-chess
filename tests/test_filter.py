@@ -56,7 +56,7 @@ class TestLossThresholds:
 
     def test_loss_budget_monotonic(self):
         """Бюджет потери падает с ростом строгости."""
-        budgets = [loss_budget(s / 10) for s in range(0, 11)]
+        budgets = [loss_budget(s / 10) for s in range(11)]
         assert budgets == sorted(budgets, reverse=True)
 
     def test_loss_budget_bounds(self):
