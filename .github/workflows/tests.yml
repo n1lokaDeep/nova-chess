@@ -9,12 +9,24 @@ on:
 
 jobs:
   pytest:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        include:
+          # Полный набор версий Python на Linux
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          # Windows отдельно: интерфейс и запуск сервера рассчитаны
+          # в первую очередь на него, стоит убедиться, что не ломается
+          - os: windows-latest
+            python-version: "3.11"
+            coverage: true
 
     steps:
       - uses: actions/checkout@v7
@@ -35,3 +47,20 @@ jobs:
         # их нет в репозитории. Проверяется вся остальная логика —
         # кодирование позиций, индексация ходов, калибровка, фильтр.
         run: pytest tests/ -v
+
+      - name: Покрытие
+        # Покрытие считается один раз, на Windows-джобе
+        if: matrix.coverage
+        run: pytest tests/ --cov=nova_chess --cov-report=term-missing --cov-report=xml
+
+      - name: Итог покрытия в сводку
+        if: matrix.coverage
+        shell: bash
+        run: |
+          {
+            echo "### Покрытие тестами"
+            echo ""
+            echo '```'
+            python -m coverage report --skip-covered || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
