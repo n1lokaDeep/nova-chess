@@ -1368,6 +1368,12 @@ function setSource(src) {
                        eng.label + " играет чёрными";
 
   syncLabels();
+
+  // отражаем выбор в адресе, чтобы ссылкой можно было поделиться
+  if (location.hash.slice(1) !== src) {
+    history.replaceState(null, "", "#" + src);
+  }
+
   refresh();
 }
 
@@ -1481,7 +1487,11 @@ async function loadFromClipboard() {
 bindSliders();
 syncLabels();
 setSide("n");
-setSource("nova");
+
+// Движок можно задать прямо в адресе: #nova, #maia, #sf.
+// Удобно для закладок и для автоматических скриншотов.
+const initialSource = location.hash.slice(1);
+setSource(ENGINES[initialSource] ? initialSource : "nova");
 drawGraph();
 </script>
 </body>
