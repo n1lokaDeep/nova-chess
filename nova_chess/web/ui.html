@@ -163,6 +163,26 @@
   #evalnum { width: 58px; text-align: right; font-weight: 700;
              font-family: ui-monospace, Consolas, monospace; color: #c3cad6; }
 
+  /* ---- график оценки партии ---- */
+  .graphcard { padding: 12px 13px; }
+  .graphcard h3 { margin-bottom: 9px; }
+  #graph {
+    width: 100%; height: 150px; display: block;
+    background: #12151b; border: 1px solid var(--line);
+    border-radius: 7px;
+  }
+  #graph .zero    { stroke: #3a4150; stroke-width: 1; stroke-dasharray: 3 3; }
+  #graph .grid    { stroke: #232833; stroke-width: 1; }
+  #graph .line    { stroke: #7aa2f7; stroke-width: 2; fill: none;
+                    stroke-linejoin: round; }
+  #graph .up      { fill: rgba(230,234,239,.55); }
+  #graph .down    { fill: rgba(58,65,80,.75); }
+  #graph .cursor  { stroke: #f0b429; stroke-width: 1; stroke-dasharray: 2 2; }
+  #graph .dot     { fill: #f0b429; }
+  #graph .lbl     { fill: #6b7280; font-size: 9px;
+                    font-family: ui-monospace, monospace; }
+  #graph .lbl.hi  { fill: #c3cad6; font-weight: 700; }
+
   /* ================= панель ================= */
 
   .panel { width: 410px; min-width: 350px; display: flex;
@@ -281,6 +301,18 @@
         <div class="evalb" id="evb" style="width:50%"></div>
       </div>
       <span id="evalnum">0.0</span>
+    </div>
+
+    <div class="card graphcard">
+      <h3>Оценка партии
+        <span class="tag" id="graphDepth">—</span>
+      </h3>
+      <svg id="graph" viewBox="0 0 560 150" preserveAspectRatio="none"></svg>
+      <div class="hint" id="graphHint">График заполняется по ходу партии.
+        Выше нуля — перевес белых, ниже — чёрных.</div>
+      <div class="row" style="margin-top:9px">
+        <button onclick="rebuildGraph()" id="btnGraph">Пересчитать линию</button>
+      </div>
     </div>
   </div>
 
@@ -427,6 +459,9 @@ let novaSide = "n";       // 'w' | 'b' | 'n'
 let moveSource = "nova";
 let showHints = true;
 let hintCount = 3;
+let evalHistory = [0];     // оценка по полуходам, индекс = номер полухода
+let graphDepth = null;     // глубина последнего пересчёта линии
+let engineHasFilter = false;   // доступен ли Stockfish (нужен для оценки)
 
 /* =====================================================================
    Описание движков — отсюда берутся все подписи,
@@ -1025,9 +1060,136 @@ async function refresh(opts) {
   }
 
   drawMoves();
-  if (j.eval !== undefined) drawEval(j.eval);
+  if (j.eval !== undefined) {
+    engineHasFilter = true;
+    drawEval(j.eval);
+    // записываем оценку в график: индекс = число сделанных полуходов.
+    // Если вернулись назад по истории — лишние точки отбрасываем.
+    evalHistory.length = hist.length + 1;
+    evalHistory[hist.length] = j.eval;
+    drawGraph();
+  }
   render();
   return j;
+}
+
+/* ---------- график оценки партии ---------- */
+
+const GRAPH_W = 560, GRAPH_H = 150, GRAPH_PAD = 16, GRAPH_MAX = 800;
+
+function drawGraph() {
+  const svg = byId("graph");
+  if (!svg) return;
+  svg.innerHTML = "";
+
+  const NS = "http://www.w3.org/2000/svg";
+  const mk = (tag, attrs) => {
+    const el = document.createElementNS(NS, tag);
+    for (const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  };
+
+  const mid = GRAPH_H / 2;
+  const half = mid - GRAPH_PAD;
+  const n = evalHistory.length;
+  const maxPly = Math.max(1, n - 1);
+
+  const X = ply => (ply / maxPly) * GRAPH_W;
+  const Y = cp => mid - (Math.max(-GRAPH_MAX, Math.min(GRAPH_MAX, cp))
+                         / GRAPH_MAX) * half;
+
+  // вспомогательные горизонтали
+  [400, -400].forEach(cp => {
+    svg.appendChild(mk("line", {
+      x1: 0, y1: Y(cp), x2: GRAPH_W, y2: Y(cp), class: "grid"
+    }));
+  });
+
+  // заливка между линией и нулём — по знаку перевеса
+  for (let i = 0; i < n - 1; i++) {
+    const a = evalHistory[i], b = evalHistory[i + 1];
+    if (a === undefined || b === undefined) continue;
+    const cls = ((a + b) / 2) >= 0 ? "up" : "down";
+    const pts = [[X(i), Y(a)], [X(i + 1), Y(b)],
+                 [X(i + 1), mid], [X(i), mid]]
+      .map(p => p.join(",")).join(" ");
+    svg.appendChild(mk("polygon", { points: pts, class: cls }));
+  }
+
+  // нулевая линия
+  svg.appendChild(mk("line", {
+    x1: 0, y1: mid, x2: GRAPH_W, y2: mid, class: "zero"
+  }));
+
+  // сама линия оценки
+  if (n >= 2) {
+    const d = evalHistory
+      .map((cp, i) => `${i ? "L" : "M"}${X(i)},${Y(cp)}`)
+      .join(" ");
+    svg.appendChild(mk("path", { d, class: "line" }));
+    svg.appendChild(mk("circle", {
+      cx: X(n - 1), cy: Y(evalHistory[n - 1]), r: 3.5, class: "dot"
+    }));
+  }
+
+  // подписи перевеса
+  [[GRAPH_MAX, "+8", 11], [0, "0", -3], [-GRAPH_MAX, "−8", -4]]
+    .forEach(([cp, text, dy]) => {
+      const t = mk("text", { x: 5, y: Y(cp) + dy, class: "lbl" });
+      t.textContent = text;
+      svg.appendChild(t);
+    });
+
+  // номера ходов по низу
+  if (n >= 3) {
+    const step = Math.max(1, Math.ceil((n - 1) / 10));
+    for (let i = 0; i < n; i += step) {
+      const t = mk("text", {
+        x: Math.min(GRAPH_W - 16, Math.max(2, X(i) - 5)),
+        y: GRAPH_H - 3,
+        class: i === n - 1 ? "lbl hi" : "lbl"
+      });
+      t.textContent = Math.ceil((i + 1) / 2);
+      svg.appendChild(t);
+    }
+  }
+
+  // пояснение
+  const hint = byId("graphHint");
+  if (!engineHasFilter) {
+    hint.textContent = "Stockfish не подключён — оценка партии недоступна.";
+  } else if (n < 2) {
+    hint.textContent = "Сделай ход — график начнёт заполняться.";
+  } else {
+    hint.textContent = "Выше нуля — перевес белых, ниже — перевес чёрных. "
+      + "Точек: " + n + ".";
+  }
+}
+
+async function rebuildGraph() {
+  if (busy) return;
+  if (!hist.length) { setStatus("Партия не начата", "err"); return; }
+
+  const btn = byId("btnGraph");
+  btn.disabled = true;
+  btn.textContent = "Считаю…";
+
+  try {
+    const j = await post("/api/eval_line", { history: hist, depth: 12 });
+    if (j.error) { setStatus(j.error, "err"); return; }
+
+    evalHistory = j.points.map(p => p.eval);
+    engineHasFilter = !!j.filter;
+    graphDepth = j.depth;
+    byId("graphDepth").textContent = "глубина " + j.depth;
+    drawGraph();
+    setStatus("Линия пересчитана: " + j.points.length + " точек", "ok");
+  } catch (e) {
+    setStatus("ошибка: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Пересчитать линию";
+  }
 }
 
 /* =====================================================================
@@ -1134,12 +1296,18 @@ function resetGame() {
   fen = START; hist = []; picked = null; lastMove = null; moves = []; legal = [];
   turn = "w"; inCheck = false;
 
+  // график начинается заново
+  evalHistory = [0];
+  graphDepth = null;
+  byId("graphDepth").textContent = "—";
+
   // полная перерисовка слоя фигур
   const layer = byId("pieces");
   layer.innerHTML = "";
   pieceEls = {}; pieceState = {};
 
   render(true);
+  drawGraph();
   refresh().then(maybeAutoEngine);
 }
 
@@ -1276,6 +1444,12 @@ async function loadFen() {
   lastMove = null;
   moves = [];
 
+  // загружена новая позиция — график начинается с неё
+  evalHistory = [0];
+  graphDepth = null;
+  byId("graphDepth").textContent = "—";
+  drawGraph();
+
   setFenStatus("Позиция загружена. Ход: " +
     (fen.split(" ")[1] === "w" ? "белые" : "чёрные") +
     ", доступно ходов: " + check.legalCount);
@@ -1308,6 +1482,7 @@ bindSliders();
 syncLabels();
 setSide("n");
 setSource("nova");
+drawGraph();
 </script>
 </body>
 </html>

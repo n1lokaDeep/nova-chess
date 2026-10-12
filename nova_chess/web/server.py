@@ -404,6 +404,38 @@ class Handler(BaseHTTPRequestHandler):
                 board.push(chess.Move.from_uci(uci))
             self._send(200, json.dumps({"fen": board.fen()}).encode())
 
+        elif path == "/api/eval_line":
+            # Оценка партии по ходам: точка на каждый полуход.
+            # Глубина намеренно небольшая — точек много, точность
+            # важна меньше скорости.
+            history = data.get("history") or []
+            depth = int(data.get("depth", 10))
+
+            board = chess.Board()
+            points = [{"ply": 0, "eval": 0}]
+
+            for i, uci in enumerate(history):
+                try:
+                    board.push(chess.Move.from_uci(uci))
+                except ValueError:
+                    break
+
+                if board.is_game_over():
+                    result = board.result()
+                    cp = 1500 if result == "1-0" else (-1500 if result == "0-1" else 0)
+                elif engine.has_filter:
+                    cp = engine.evaluate_for_display(board, depth=depth)
+                else:
+                    cp = 0
+
+                points.append({"ply": i + 1, "eval": cp})
+
+            self._send(200, json.dumps({
+                "points": points,
+                "depth": depth,
+                "filter": engine.has_filter,
+            }).encode())
+
         else:
             self._send(404, b"{}")
 
