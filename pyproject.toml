@@ -45,3 +45,7 @@ include = ["nova_chess*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# Корень репозитория в путях импорта: без этого `pytest tests/`
+# не находит пакет nova_chess (python -m pytest добавляет cwd сам,
+# а обычный вызов pytest — нет).
+pythonpath = ["."]
