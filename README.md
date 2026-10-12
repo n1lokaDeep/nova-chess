@@ -431,3 +431,18 @@ MIT — см. [LICENSE](LICENSE).
 
 Модели Nova и Maia-2 распространяются отдельно их авторами;
 веса скачиваются с Hugging Face и в репозиторий не входят.
+
+---
+
+<div align="center">
+
+Автор — **[n1lokaDeep](https://github.com/n1lokaDeep)**
+
+<a href="https://github.com/n1lokaDeep">
+  <img src="https://img.shields.io/badge/GitHub-n1lokaDeep-ff9ecb?style=for-the-badge&logo=github&logoColor=white&labelColor=1a1035" alt="github"/>
+</a>
+<a href="https://github.com/n1lokaDeep?tab=repositories">
+  <img src="https://img.shields.io/badge/%D0%B4%D1%80%D1%83%D0%B3%D0%B8%D0%B5%20%D0%BF%D1%80%D0%BE%D0%B5%D0%BA%D1%82%D1%8B-%D1%81%D0%BC%D0%BE%D1%82%D1%80%D0%B5%D1%82%D1%8C-7ad7ff?style=for-the-badge&labelColor=1a1035" alt="projects"/>
+</a>
+
+</div>
