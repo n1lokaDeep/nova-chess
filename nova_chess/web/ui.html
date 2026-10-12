@@ -53,6 +53,11 @@
           color:#8b93a1; margin:11px 0 5px; }
   label b { color:#7aa2f7; }
   input[type=range] { width:100%; accent-color:#7aa2f7; }
+  input[type=text] { width:100%; background:#1a1d24; color:#e8eaed;
+                     border:1px solid #333a47; border-radius:6px;
+                     padding:8px 10px; font-size:12px;
+                     font-family:ui-monospace,Consolas,monospace; }
+  input[type=text]:focus { outline:none; border-color:#7aa2f7; }
 
   button { background:#232833; color:#e8eaed; border:1px solid #333a47;
            border-radius:7px; padding:9px 13px; cursor:pointer; font-size:13px; }
@@ -129,14 +134,30 @@
   </div>
 
   <div class="panel">
-    <div class="card">
+    <!-- Панель человека: видна только когда источник подсказок — Nova -->
+    <div class="card" id="panelHuman">
       <h3>Профиль игрока</h3>
       <label>Рейтинг <b id="eloL">1500</b></label>
       <input type="range" id="elo" min="800" max="2700" step="50" value="1500">
+      <div class="hint" id="eloRange">Nova обучена на диапазоне 800–2700.</div>
       <label>Классика ↔ Гипермодерн <b id="clsL">0.50</b></label>
       <input type="range" id="cls" min="0" max="1" step="0.05" value="0.5">
       <label>Агрессия <b id="aggL">0.50</b></label>
       <input type="range" id="agg" min="0" max="1" step="0.05" value="0.5">
+      <label>Фильтр качества <b id="strL">авто</b></label>
+      <input type="range" id="str" min="-1" max="1" step="0.05" value="-1">
+      <div class="hint">Крайнее левое положение = <b>авто</b>: порог берётся
+        из рейтинга. На 800 зевки проходят, на 2700 отсеиваются.</div>
+    </div>
+
+    <!-- Панель Stockfish: он не зависит от рейтинга -->
+    <div class="card" id="panelSF" style="display:none">
+      <h3>Stockfish</h3>
+      <label>Глубина анализа <b id="sfdL">16</b></label>
+      <input type="range" id="sfd" min="8" max="24" step=2 value="16">
+      <div class="hint">Stockfish считает варианты и не зависит от рейтинга —
+        он всегда ищет объективно лучший ход. Больше глубина = сильнее,
+        но медленнее.</div>
     </div>
 
     <div class="card">
@@ -145,18 +166,38 @@
         <button id="sideN" onclick="setSide('n')">Человек за обе</button>
       </div>
       <div class="row" style="margin-top:7px">
-        <button id="sideW" onclick="setSide('w')">Nova: белые</button>
-        <button id="sideB" onclick="setSide('b')">Nova: чёрные</button>
+        <button id="sideW" onclick="setSide('w')">Движок: белые</button>
+        <button id="sideB" onclick="setSide('b')">Движок: чёрные</button>
       </div>
-      <div class="hint">Нова ходит сама только если выбрана её сторона.
+      <div class="hint">Движок ходит сам только если выбрана его сторона.
         Сейчас: <b id="whoPlays">человек за обе стороны</b></div>
-      <label>Фильтр качества (Stockfish) <b id="strL">0.60</b></label>
-      <input type="range" id="str" min="0" max="1" step="0.05" value="0.6">
-      <div class="hint">0 — чистая Nova, играет ровно как человек, но может зевнуть.
-        1 — жёстко отсекает ходы, теряющие больше 0.5 пешки.</div>
       <label>Разброс <b id="shpL">3.0</b></label>
       <input type="range" id="shp" min="1" max="8" step="0.5" value="3">
-      <div class="hint">Больше — чаще играет самый вероятный человеческий ход.</div>
+      <div class="hint">Больше — чаще играет самый вероятный ход.</div>
+    </div>
+
+    <div class="card">
+      <h3>Позиция</h3>
+      <input type="text" id="fenInput" spellcheck="false"
+             placeholder="вставь FEN или нажми «Текущая»">
+      <div class="row" style="margin-top:7px">
+        <button onclick="loadFen()">Загрузить</button>
+        <button onclick="copyCurrentFen()">Текущая</button>
+        <button onclick="loadFromClipboard()">Из буфера</button>
+      </div>
+      <div class="hint" id="fenStatus">Вставь любую позицию в формате FEN.</div>
+    </div>
+
+    <div class="card">
+      <h3>Источник подсказок</h3>
+      <div class="row">
+        <button id="srcNova" onclick="setSource('nova')">Nova</button>
+        <button id="srcMaia" onclick="setSource('maia')">Maia-2</button>
+        <button id="srcSF" onclick="setSource('sf')">Stockfish</button>
+      </div>
+      <div class="hint" id="srcInfo">Nova предсказывает ходы живых людей
+        твоего рейтинга. Stockfish считает объективно лучший ход.
+        Переключай и сравнивай — ответы расходятся.</div>
     </div>
 
     <div class="card">
@@ -205,6 +246,7 @@ let legal = [];
 let moves = [];
 let showHints = true;
 let hintCount = 3;        // сколько стрелок рисовать (1–5)
+let moveSource = "nova";  // 'nova' — люди, 'sf' — Stockfish
 let novaSide = "n";       // 'w' | 'b' | 'n' (оба)
 let busy = false;
 let lastMove = null;
@@ -217,6 +259,7 @@ const S = {
   str: document.getElementById("str"),
   shp: document.getElementById("shp"),
   hn:  document.getElementById("hn"),
+  sfd: document.getElementById("sfd"),
 };
 const L = {
   elo: document.getElementById("eloL"),
@@ -225,6 +268,7 @@ const L = {
   str: document.getElementById("strL"),
   shp: document.getElementById("shpL"),
   hn:  document.getElementById("hnL"),
+  sfd: document.getElementById("sfdL"),
 };
 
 /* -------- разбор FEN -------- */
@@ -443,6 +487,11 @@ function onSquare(sq, name, piece, turn) {
 }
 
 /* -------- сеть -------- */
+function showStatus(text) {
+  const el = document.getElementById("status");
+  if (el) el.textContent = text;
+}
+
 async function post(url, body) {
   const r = await fetch(url, {
     method: "POST",
@@ -453,26 +502,50 @@ async function post(url, body) {
 }
 
 function params() {
-  return {
+  const rawStrict = +S.str.value;
+  const p = {
     fen,
     rating: +S.elo.value,
     classical: +S.cls.value,
     aggression: +S.agg.value,
-    strictness: +S.str.value,
-    sharpness: +S.shp.value
+    strictness: rawStrict < 0 ? null : rawStrict,
+    sharpness: +S.shp.value,
+    source: moveSource
   };
+  if (moveSource === "sf" && S.sfd) {
+    p.sfDepth = +S.sfd.value;
+  }
+  return p;
 }
 
-async function refresh() {
-  const j = await post("/api/state", params());
+async function refresh(opts = {}) {
+  const p = params();
+  if (opts.fast) p.wantEval = false;
+
+  let j;
+  try {
+    j = await post("/api/state", p);
+  } catch (e) {
+    showStatus("сервер не отвечает: " + e);
+    return null;
+  }
+
+  if (j.error) { showStatus(j.error); return j; }
+
   legal = j.legal || [];
   moves = j.moves || [];
+  turn = j.turn || fen.split(" ")[1];
+
   if (j.over) {
-    document.getElementById("status").textContent =
-      "Партия окончена. Результат: " + j.reason;
+    showStatus("Партия окончена. Результат: " + j.reason);
+  } else {
+    const who = turn === "w" ? "белые" : "чёрные";
+    showStatus("Ход " + who + (j.check ? " — ШАХ!" : "") +
+      "   ·   подсказок: " + moves.length);
   }
+
   drawMoves();
-  drawEval(j.eval || 0);
+  if (j.eval !== undefined) drawEval(j.eval);
   render();
   return j;
 }
@@ -501,23 +574,130 @@ function drawEval(cp) {
   document.getElementById("evalnum").textContent = (cp > 0 ? "+" : "") + v;
 }
 
-/* -------- ходы -------- */
+/* -------- локальные ходы (без сервера) -------- */
+
+/* Применяет ход к FEN прямо в браузере. Это убирает задержку:
+   раньше каждый ход ждал два запроса к серверу, каждый из которых
+   прогонял Stockfish. Теперь доска реагирует мгновенно,
+   а сервер вызывается только за новыми подсказками. */
+
+function expandFenRow(row) {
+  const out = [];
+  for (const ch of row) {
+    if (ch >= "1" && ch <= "8") {
+      for (let i = 0; i < +ch; i++) out.push(null);
+    } else {
+      out.push(ch);
+    }
+  }
+  return out;
+}
+
+function parseFenBoard(f) {
+  const rows = f.split(" ")[0].split("/");
+  const board = [];
+  for (let r = 0; r < 8; r++) board.push(expandFenRow(rows[r]));
+  return board;   // board[0] — 8-й ряд
+}
+
+function boardToFen(board, rest) {
+  return board.map(row => {
+    let s = "", empty = 0;
+    for (const sq of row) {
+      if (sq === null) { empty++; }
+      else { if (empty) { s += empty; empty = 0; } s += sq; }
+    }
+    if (empty) s += empty;
+    return s;
+  }).join("/") + " " + rest;
+}
+
+function fileOf(name) { return name.charCodeAt(0) - 97; }
+function rankOf(name) { return +name[1] - 1; }
+
+function chessMoveLocal(fenStr, uci) {
+  const parts = fenStr.split(" ");
+  const board = parseFenBoard(fenStr);
+  const from = uci.slice(0, 2), to = uci.slice(2, 4), promo = uci[4];
+
+  const fr = 7 - rankOf(from), ff = fileOf(from);
+  const tr = 7 - rankOf(to),   tf = fileOf(to);
+
+  const piece = board[fr][ff];
+  if (!piece) return null;
+
+  const target = board[tr][tf];
+  const isPawn = piece.toLowerCase() === "p";
+  const isKing = piece.toLowerCase() === "k";
+  const isRook = piece.toLowerCase() === "r";
+  const white = piece === piece.toUpperCase();
+
+  // проверка очереди хода
+  if (white !== (parts[1] === "w")) return null;
+
+  board[fr][ff] = null;
+  board[tr][tf] = promo
+    ? (white ? promo.toUpperCase() : promo.toLowerCase())
+    : piece;
+
+  // рокировка — двигаем ладью
+  let castling = parts[2];
+  if (isKing && Math.abs(tf - ff) === 2) {
+    if (tf > ff) { board[tr][5] = board[tr][7]; board[tr][7] = null; }
+    else         { board[tr][3] = board[tr][0]; board[tr][0] = null; }
+  }
+
+  // обновляем права рокировки
+  const remove = c => { castling = castling.replace(c, ""); };
+  if (isKing) { if (white) { remove("K"); remove("Q"); } else { remove("k"); remove("q"); } }
+  if (isRook) {
+    if (white) { if (from === "a1") remove("Q"); if (from === "h1") remove("K"); }
+    else       { if (from === "a8") remove("q"); if (from === "h8") remove("k"); }
+  }
+  if (castling === "") castling = "-";
+
+  // взятие на проходе
+  let ep = "-";
+  if (isPawn && Math.abs(tr - fr) === 2) {
+    ep = "abcdefgh"[tf] + (white ? "3" : "6");
+  }
+
+  // счётчик полуходов и номер хода
+  const halfmove = (isPawn || target) ? 0 : (+parts[4] || 0) + 1;
+  const fullmove = parts[1] === "b" ? (+parts[5] || 1) + 1 : (+parts[5] || 1);
+  const nextTurn = parts[1] === "w" ? "b" : "w";
+
+  return {
+    fen: boardToFen(board, [nextTurn, castling, ep, halfmove, fullmove].join(" ")),
+    capture: !!target,
+    piece
+  };
+}
 async function doMove(uci) {
   if (busy) return;
   busy = true;
-  try {
-    const j = await post("/api/play", { fen, move: uci });
-    if (j.error) { document.getElementById("status").textContent = j.error; busy = false; render(); return; }
-    hist.push(uci);
-    fen = j.fen;
-    lastMove = uci;
-    picked = null;
-    await refresh();
-  } catch (e) {
-    document.getElementById("status").textContent = "ошибка: " + e;
+
+  // Ход применяется МГНОВЕННО на клиенте, без ожидания сервера.
+  // Раньше здесь было два последовательных запроса (/api/play и /api/state),
+  // каждый из которых считал Stockfish — отсюда ощущение «пинга 9000».
+  const mv = chessMoveLocal(fen, uci);
+  if (!mv) {
+    document.getElementById("status").textContent = "нелегальный ход";
+    busy = false;
+    return;
   }
-  busy = false;
-  render();
+
+  hist.push(uci);
+  fen = mv.fen;
+  lastMove = uci;
+  picked = null;
+  turn = fen.split(" ")[1];
+
+  render();                     // доска обновляется сразу
+  showStatus("ход сделан, считаю подсказки…");
+
+  busy = false;                 // человек снова может ходить
+  await refresh();              // подсказки подтягиваются фоном
   maybeAutoNova();
 }
 
@@ -606,9 +786,12 @@ function syncLabels() {
   L.elo.textContent = S.elo.value;
   L.cls.textContent = (+S.cls.value).toFixed(2);
   L.agg.textContent = (+S.agg.value).toFixed(2);
-  L.str.textContent = (+S.str.value).toFixed(2);
   L.shp.textContent = (+S.shp.value).toFixed(1);
   L.hn.textContent = S.hn.value;
+
+  const rawStrict = +S.str.value;
+  L.str.textContent = rawStrict < 0 ? "авто" : rawStrict.toFixed(2);
+  if (L.sfd && S.sfd) L.sfd.textContent = S.sfd.value;
 }
 
 function bindSliders() {
@@ -629,10 +812,113 @@ function bindSliders() {
   });
 }
 
+/* -------- загрузка позиции -------- */
+
+function setFenStatus(text, ok = true) {
+  const el = document.getElementById("fenStatus");
+  el.textContent = text;
+  el.style.color = ok ? "#6b7280" : "#f87171";
+}
+
+async function loadFen() {
+  const raw = document.getElementById("fenInput").value.trim();
+  if (!raw) { setFenStatus("Введи FEN", false); return; }
+
+  // Валидируем через отдельный эндпоинт — он только проверяет позицию
+  let check;
+  try {
+    check = await post("/api/validate", { fen: raw });
+  } catch (e) {
+    setFenStatus("Сервер недоступен", false);
+    return;
+  }
+
+  if (!check || !check.ok) {
+    setFenStatus("Ошибка FEN: " + ((check && check.error) || "не удалось разобрать"), false);
+    return;
+  }
+
+  fen = check.fen;          // нормализованный FEN от сервера
+  hist = [];
+  picked = null;
+  lastMove = null;
+  await refresh();
+  setFenStatus("Позиция загружена. Ход: " +
+    (fen.split(" ")[1] === "w" ? "белые" : "чёрные") +
+    ", ходов доступно: " + check.legalCount);
+  maybeAutoNova();
+}
+
+function copyCurrentFen() {
+  const inp = document.getElementById("fenInput");
+  inp.value = fen;
+  setFenStatus("Текущая позиция вставлена в поле");
+}
+
+async function loadFromClipboard() {
+  try {
+    const text = await navigator.clipboard.readText();
+    document.getElementById("fenInput").value = text.trim();
+    setFenStatus("Вставлено из буфера — жми «Загрузить»");
+  } catch (e) {
+    setFenStatus("Браузер не дал доступ к буферу — вставь вручную (Ctrl+V)", false);
+  }
+}
+
+/* -------- источник подсказок -------- */
+
+function setSource(src) {
+  moveSource = src;
+  ["srcNova", "srcMaia", "srcSF"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove("pri");
+  });
+  const btn = document.getElementById(
+    src === "nova" ? "srcNova" : src === "maia" ? "srcMaia" : "srcSF");
+  if (btn) btn.classList.add("pri");
+
+  // Панель человека нужна только для человеческих движков.
+  // Stockfish не зависит от рейтинга и стиля.
+  const humanSource = (src === "nova" || src === "maia");
+  document.getElementById("panelHuman").style.display = humanSource ? "" : "none";
+  document.getElementById("panelSF").style.display = (src === "sf") ? "" : "none";
+
+  const info = document.getElementById("srcInfo");
+  const rangeHint = document.getElementById("eloRange");
+  const eloSlider = document.getElementById("elo");
+
+  if (src === "nova") {
+    info.textContent = "Nova: обучена на 500 млн партий Lichess, "
+      + "предсказывает ходы людей. Разница между уровнями умеренная.";
+    eloSlider.min = 800; eloSlider.max = 2700;
+    if (rangeHint) rangeHint.textContent = "Nova обучена на диапазоне 800–2700.";
+  } else if (src === "maia") {
+    info.textContent = "Maia-2: обучена по рейтинговым диапазонам, "
+      + "разница между уровнями выражена сильнее, чем у Nova.";
+    // Maia-2 работает только в этом диапазоне — ограничиваем ползунок,
+    // чтобы нельзя было выставить рейтинг, который она не умеет
+    eloSlider.min = 1100; eloSlider.max = 1900;
+    if (+eloSlider.value > 1900) eloSlider.value = "1900";
+    if (+eloSlider.value < 1100) eloSlider.value = "1100";
+    if (rangeHint) {
+      rangeHint.textContent = "Maia-2 обучена только на 1100–1900. "
+        + "Ползунок ограничен этим диапазоном.";
+    }
+  } else {
+    info.textContent = "Stockfish: считает варианты и всегда ищет объективно "
+      + "лучший ход. Рейтинг на него не влияет.";
+    eloSlider.min = 800; eloSlider.max = 2700;
+  }
+
+  syncLabels();
+  refresh();
+}
+
 /* -------- старт -------- */
 bindSliders();
 syncLabels();
 setSide("n");
+setSource("nova");
 refresh().then(maybeAutoNova);
 </script>
 </body>
