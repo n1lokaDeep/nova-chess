@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Nova + Stockfish — шахматы</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0f1115; color:#e8eaed; font-family:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  .app { display:flex; gap:20px; padding:20px; align-items:flex-start; }
+
+  /* ---------- доска ---------- */
+  .boardarea { display:flex; flex-direction:column; gap:8px; }
+  .playerbar { display:flex; align-items:center; gap:10px; background:#1a1d24;
+               border:1px solid #262a33; border-radius:8px; padding:9px 13px; }
+  .playerbar.active { border-color:#7aa2f7; background:#1b2333; }
+  .avatar { width:30px; height:30px; border-radius:6px; display:flex;
+            align-items:center; justify-content:center; font-size:17px; }
+  .avatar.w { background:#e8eaed; color:#111; }
+  .avatar.b { background:#33383f; color:#e8eaed; }
+  .pname { font-size:14px; font-weight:600; }
+  .ptype { font-size:11px; color:#8b93a1; }
+  .turn { font-size:11px; color:#7aa2f7; font-weight:700; margin-left:auto; }
+
+  .boardwrap { position:relative; }
+  #board { display:grid; grid-template-columns:repeat(8,70px);
+           grid-template-rows:repeat(8,70px); border-radius:6px; overflow:hidden;
+           border:2px solid #262a33; }
+  .sq { position:relative; display:flex; align-items:center; justify-content:center;
+        font-size:46px; user-select:none; line-height:1; }
+  .lt { background:#e9edf2; }
+  .dk { background:#7d8ba1; }
+  .sq.movable { cursor:pointer; }
+  .sq.other { cursor:default; }
+  .sq.picked { box-shadow: inset 0 0 0 4px #f0b429; }
+  .sq.lastf  { background:#cdd6a0; }
+  .sq.lastt  { background:#c3cf8e; }
+  .sq.best::after { content:""; position:absolute; inset:6px; border-radius:50%;
+                    background:rgba(74,222,128,.55); }
+  .sq.cand::after { content:""; position:absolute; inset:16px; border-radius:50%;
+                    background:rgba(122,162,247,.55); }
+  .pc.w { color:#fff; text-shadow:0 0 1px #000,0 1px 2px rgba(0,0,0,.65); }
+  .pc.b { color:#1b1f26; text-shadow:0 1px 1px rgba(255,255,255,.35); }
+  .badge { position:absolute; top:2px; left:3px; font-size:9px; font-weight:700;
+           color:#4b5563; background:rgba(255,255,255,.5); border-radius:3px; padding:0 3px; }
+  .badge.on-dark { color:#dfe5ec; background:rgba(0,0,0,.32); }
+
+  /* ---------- панель ---------- */
+  .panel { width:400px; min-width:340px; display:flex; flex-direction:column; gap:12px; }
+  .card { background:#161920; border:1px solid #262a33; border-radius:10px; padding:14px; }
+  .card h3 { margin:0 0 11px; font-size:13px; font-weight:600; color:#c3cad6; }
+  label { display:flex; justify-content:space-between; font-size:12px;
+          color:#8b93a1; margin:11px 0 5px; }
+  label b { color:#7aa2f7; }
+  input[type=range] { width:100%; accent-color:#7aa2f7; }
+
+  button { background:#232833; color:#e8eaed; border:1px solid #333a47;
+           border-radius:7px; padding:9px 13px; cursor:pointer; font-size:13px; }
+  button:hover:not(:disabled) { background:#2c3340; }
+  button:disabled { opacity:.4; cursor:default; }
+  button.pri { background:#7aa2f7; color:#0f1115; border-color:#7aa2f7; font-weight:700; }
+  .row { display:flex; gap:7px; flex-wrap:wrap; }
+  .row > button { flex:1; }
+
+  .mv { display:flex; justify-content:space-between; align-items:center; gap:8px;
+        padding:7px 10px; border-radius:6px; background:#1e222b; margin-bottom:5px;
+        cursor:pointer; font-size:13px; }
+  .mv:hover { background:#262c37; }
+  .mv.top { background:#1f2d45; border:1px solid #7aa2f7; }
+  .mv .uci { font-family:ui-monospace,Consolas,monospace; font-weight:700; }
+  .mv .pct { color:#7aa2f7; font-weight:700; }
+  .mv .track { flex:1; height:5px; background:#2b313c; border-radius:3px; overflow:hidden; }
+  .mv .fill { height:100%; background:#7aa2f7; }
+
+  #status { font-size:12px; color:#8b93a1; min-height:17px; }
+  .evalbar { display:flex; align-items:center; gap:9px; font-size:12px; color:#8b93a1; }
+  .evaltrack { flex:1; height:13px; background:#1b1f27; border-radius:7px;
+               overflow:hidden; display:flex; border:1px solid #262a33; }
+  .evalw { background:#dfe5ec; transition:width .25s; }
+  .evalb { background:#3a4150; transition:width .25s; }
+  #evalnum { width:56px; text-align:right; font-weight:700;
+             font-family:ui-monospace,monospace; color:#c3cad6; }
+  .hint { font-size:11px; color:#6b7280; line-height:1.55; }
+
+  /* ---------- история ---------- */
+  #hist { max-height:130px; overflow-y:auto; font-family:ui-monospace,monospace;
+          font-size:12px; line-height:1.75; }
+  #hist span { display:inline-block; min-width:58px; color:#98a2b3; }
+  #hist b { color:#c3cad6; }
+  #overlay { position:absolute; inset:0; background:rgba(15,17,21,.9); display:none;
+             align-items:center; justify-content:center; flex-direction:column; gap:11px;
+             border-radius:6px; }
+  #overlay.show { display:flex; }
+  #spin { width:30px; height:30px; border:3px solid #2b313c; border-top-color:#7aa2f7;
+          border-radius:50%; animation:sp .7s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="boardarea">
+    <div class="playerbar" id="barTop">
+      <div class="avatar b">♚</div>
+      <div><div class="pname" id="topName">Чёрные</div>
+           <div class="ptype" id="topType">человек</div></div>
+      <div class="turn" id="topTurn"></div>
+    </div>
+
+    <div class="boardwrap">
+      <div id="board"></div>
+      <div id="overlay"><div id="spin"></div><div id="ovtext">думаю…</div></div>
+    </div>
+
+    <div class="playerbar active" id="barBot">
+      <div class="avatar w">♔</div>
+      <div><div class="pname" id="botName">Белые</div>
+           <div class="ptype" id="botType">человек</div></div>
+      <div class="turn" id="botTurn"></div>
+    </div>
+
+    <div class="evalbar card" style="padding:9px 13px">
+      <span>Оценка</span>
+      <div class="evaltrack"><div class="evalw" id="evw" style="width:50%"></div>
+                             <div class="evalb" id="evb" style="width:50%"></div></div>
+      <span id="evalnum">0.0</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="card">
+      <h3>Профиль игрока</h3>
+      <label>Рейтинг <b id="eloL">1500</b></label>
+      <input type="range" id="elo" min="800" max="2700" step="50" value="1500">
+      <label>Классика ↔ Гипермодерн <b id="clsL">0.50</b></label>
+      <input type="range" id="cls" min="0" max="1" step="0.05" value="0.5">
+      <label>Агрессия <b id="aggL">0.50</b></label>
+      <input type="range" id="agg" min="0" max="1" step="0.05" value="0.5">
+    </div>
+
+    <div class="card">
+      <h3>За кого играет Nova</h3>
+      <div class="row">
+        <button id="sideW" onclick="setSide('w')">Белые</button>
+        <button id="sideB" onclick="setSide('b')">Чёрные</button>
+        <button id="sideN" onclick="setSide('n')">Оба сами</button>
+      </div>
+      <label>Фильтр качества (Stockfish) <b id="strL">0.60</b></label>
+      <input type="range" id="str" min="0" max="1" step="0.05" value="0.6">
+      <div class="hint">0 — чистая Nova, играет ровно как человек, но может зевнуть.
+        1 — жёстко отсекает ходы, теряющие больше 0.5 пешки.</div>
+      <label>Разброс <b id="shpL">3.0</b></label>
+      <input type="range" id="shp" min="1" max="8" step="0.5" value="3">
+      <div class="hint">Больше — чаще играет самый вероятный человеческий ход.</div>
+    </div>
+
+    <div class="card">
+      <h3>Что сыграл бы человек</h3>
+      <div id="moves"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <button class="pri" onclick="novaPlay()" id="btnNova">Ход Nova</button>
+        <button onclick="undo()" id="btnUndo">Отменить</button>
+        <button onclick="resetGame()">Заново</button>
+      </div>
+      <div class="row" style="margin-top:7px">
+        <button onclick="flip()">Перевернуть</button>
+        <button onclick="toggleHints()" id="btnHint">Подсказки: вкл</button>
+      </div>
+      <div id="status" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h3>Партия</h3>
+      <div id="hist"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const G = { p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚",
+            P:"♙",N:"♘",B:"♗",R:"♖",Q:"♕",K:"♔" };
+const START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+let fen = START;
+let hist = [];            // UCI ходы
+let flipped = false;
+let picked = null;
+let legal = [];
+let moves = [];
+let showHints = true;
+let novaSide = "n";       // 'w' | 'b' | 'n' (оба)
+let busy = false;
+let lastMove = null;
+
+/* элементы управления — объявлены сразу, используются ниже */
+const S = {
+  elo: document.getElementById("elo"),
+  cls: document.getElementById("cls"),
+  agg: document.getElementById("agg"),
+  str: document.getElementById("str"),
+  shp: document.getElementById("shp"),
+};
+const L = {
+  elo: document.getElementById("eloL"),
+  cls: document.getElementById("clsL"),
+  agg: document.getElementById("aggL"),
+  str: document.getElementById("strL"),
+  shp: document.getElementById("shpL"),
+};
+
+/* -------- разбор FEN -------- */
+function parseFen(f) {
+  const rows = f.split(" ")[0].split("/");
+  const m = {};
+  rows.forEach((row, ri) => {
+    let fi = 0;
+    for (const ch of row) {
+      if (/\d/.test(ch)) fi += +ch;
+      else { m[(7 - ri) * 8 + fi] = ch; fi++; }
+    }
+  });
+  return m;
+}
+
+function sqName(sq) { return "abcdefgh"[sq % 8] + (Math.floor(sq / 8) + 1); }
+
+/* -------- отрисовка доски -------- */
+function render() {
+  const board = document.getElementById("board");
+  const pieces = parseFen(fen);
+  const turn = fen.split(" ")[1];
+  board.innerHTML = "";
+
+  const bestSet = {}, candSet = {};
+  if (showHints && moves.length) {
+    moves.slice(0, 4).forEach((mv, i) => {
+      const to = mv[0].slice(2, 4);
+      if (i === 0) bestSet[to] = 1; else candSet[to] = 1;
+    });
+  }
+
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const rank = flipped ? r : 7 - r;
+      const file = flipped ? 7 - f : f;
+      const sq = rank * 8 + file;
+      const name = sqName(sq);
+      const light = (rank + file) % 2 === 1;
+
+      const d = document.createElement("div");
+      d.className = "sq " + (light ? "lt" : "dk");
+
+      if (lastMove && (lastMove.slice(0,2) === name)) d.classList.add("lastf");
+      if (lastMove && (lastMove.slice(2,4) === name)) d.classList.add("lastt");
+
+      const p = pieces[sq];
+      if (p) {
+        const sp = document.createElement("span");
+        sp.className = "pc " + (p === p.toUpperCase() ? "w" : "b");
+        sp.textContent = G[p] || "";
+        d.appendChild(sp);
+        // можно ли взять эту фигуру
+        if (p === p.toUpperCase() === (turn === "w") && !busy) d.classList.add("movable");
+      }
+
+      if (picked === sq) d.classList.add("picked");
+      if (bestSet[name]) d.classList.add("best");
+      else if (candSet[name]) d.classList.add("cand");
+
+      // координаты
+      if (f === 0) {
+        const b = document.createElement("div");
+        b.className = "badge" + (light ? "" : " on-dark");
+        b.textContent = rank + 1;
+        d.appendChild(b);
+      }
+      if (r === 7) {
+        const b = document.createElement("div");
+        b.className = "badge" + (light ? "" : " on-dark");
+        b.style.left = "auto"; b.style.right = "3px";
+        b.textContent = "abcdefgh"[file];
+        d.appendChild(b);
+      }
+
+      d.onclick = () => onSquare(sq, name, p, turn);
+      board.appendChild(d);
+    }
+  }
+
+  // полосы игроков
+  const topIsBlack = !flipped;
+  document.getElementById("topName").textContent = topIsBlack ? "Чёрные" : "Белые";
+  document.getElementById("botName").textContent = topIsBlack ? "Белые" : "Чёрные";
+  document.getElementById("topType").textContent = sideLabel(topIsBlack ? "b" : "w");
+  document.getElementById("botType").textContent = sideLabel(topIsBlack ? "w" : "b");
+  document.getElementById("topTurn").textContent = (turn === (topIsBlack ? "b" : "w")) ? "● ход" : "";
+  document.getElementById("botTurn").textContent = (turn === (topIsBlack ? "w" : "b")) ? "● ход" : "";
+  document.getElementById("barTop").classList.toggle("active", turn === (topIsBlack ? "b" : "w"));
+  document.getElementById("barBot").classList.toggle("active", turn === (topIsBlack ? "w" : "b"));
+
+  document.getElementById("btnNova").disabled = busy;
+  document.getElementById("btnUndo").disabled = busy || hist.length === 0;
+  renderHist();
+}
+
+function sideLabel(s) {
+  if (novaSide === "n") return "Nova играет";
+  return novaSide === s ? "Nova играет" : "ты играешь";
+}
+
+function renderHist() {
+  const el = document.getElementById("hist");
+  el.innerHTML = "";
+  for (let i = 0; i < hist.length; i += 2) {
+    const n = i / 2 + 1;
+    const w = hist[i], b = hist[i+1] || "";
+    el.innerHTML += `<span>${n}.</span><b>${w}</b> ${b ? "<b>"+b+"</b>" : ""} &nbsp;`;
+  }
+  el.scrollTop = el.scrollHeight;
+}
+
+/* -------- клик по полю -------- */
+function onSquare(sq, name, piece, turn) {
+  if (busy) return;
+  if (novaSide === turn) {
+    document.getElementById("status").textContent =
+      "Сейчас ход Nova (" + (turn === "w" ? "белые" : "чёрные") + ")";
+    return;
+  }
+
+  if (picked === null) {
+    if (!piece) return;
+    const own = piece === piece.toUpperCase() ? "w" : "b";
+    if (own !== turn) return;
+    picked = sq;
+    render();
+    return;
+  }
+
+  const from = sqName(picked);
+  let mv = from + name;
+  if (legal.includes(mv)) { doMove(mv); return; }
+  if (legal.includes(mv + "q")) { doMove(mv + "q"); return; }
+
+  if (piece) {
+    const own = piece === piece.toUpperCase() ? "w" : "b";
+    if (own === turn) { picked = sq; render(); return; }
+  }
+  picked = null;
+  render();
+}
+
+/* -------- сеть -------- */
+async function post(url, body) {
+  const r = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  return r.json();
+}
+
+function params() {
+  return {
+    fen,
+    rating: +S.elo.value,
+    classical: +S.cls.value,
+    aggression: +S.agg.value,
+    strictness: +S.str.value,
+    sharpness: +S.shp.value
+  };
+}
+
+async function refresh() {
+  const j = await post("/api/state", params());
+  legal = j.legal || [];
+  moves = j.moves || [];
+  if (j.over) {
+    document.getElementById("status").textContent =
+      "Партия окончена. Результат: " + j.reason;
+  }
+  drawMoves();
+  drawEval(j.eval || 0);
+  render();
+  return j;
+}
+
+function drawMoves() {
+  const box = document.getElementById("moves");
+  box.innerHTML = "";
+  if (!moves.length) { box.innerHTML = '<div class="hint">нет данных</div>'; return; }
+  const mx = moves[0][1] || 1;
+  moves.forEach((mv, i) => {
+    const d = document.createElement("div");
+    d.className = "mv" + (i === 0 ? " top" : "");
+    d.innerHTML = `<span class="uci">${mv[0]}</span>
+                   <div class="track"><div class="fill" style="width:${(mv[1]/mx*100).toFixed(0)}%"></div></div>
+                   <span class="pct">${(mv[1]*100).toFixed(1)}%</span>`;
+    d.onclick = () => { if (!busy) doMove(mv[0]); };
+    box.appendChild(d);
+  });
+}
+
+function drawEval(cp) {
+  let pct = 50 + Math.max(-50, Math.min(50, cp / 10));
+  document.getElementById("evw").style.width = pct + "%";
+  document.getElementById("evb").style.width = (100 - pct) + "%";
+  const v = (cp / 100).toFixed(1);
+  document.getElementById("evalnum").textContent = (cp > 0 ? "+" : "") + v;
+}
+
+/* -------- ходы -------- */
+async function doMove(uci) {
+  if (busy) return;
+  busy = true;
+  try {
+    const j = await post("/api/play", { fen, move: uci });
+    if (j.error) { document.getElementById("status").textContent = j.error; busy = false; render(); return; }
+    hist.push(uci);
+    fen = j.fen;
+    lastMove = uci;
+    picked = null;
+    await refresh();
+  } catch (e) {
+    document.getElementById("status").textContent = "ошибка: " + e;
+  }
+  busy = false;
+  render();
+  maybeAutoNova();
+}
+
+async function undo() {
+  if (busy || !hist.length) return;
+  const steps = (novaSide === "n") ? 1 : Math.min(2, hist.length);
+  for (let i = 0; i < steps; i++) hist.pop();
+  const j = await post("/api/replay", { history: hist });
+  fen = j.fen;
+  lastMove = hist.length ? hist[hist.length - 1] : null;
+  picked = null;
+  await refresh();
+}
+
+/* -------- Nova -------- */
+async function novaPlay() {
+  if (busy) return;
+  busy = true;
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("ovtext").textContent = "Nova думает…";
+  render();
+  try {
+    const j = await post("/api/nova", params());
+    if (j.error) { document.getElementById("status").textContent = j.error; }
+    else {
+      hist.push(j.move);
+      fen = j.fen;
+      lastMove = j.move;
+      picked = null;
+    }
+    await refresh();
+  } catch (e) {
+    document.getElementById("status").textContent = "ошибка: " + e;
+  }
+  busy = false;
+  document.getElementById("overlay").classList.remove("show");
+  render();
+}
+
+function maybeAutoNova() {
+  const turn = fen.split(" ")[1];
+  if (novaSide === "n" || novaSide === turn) {
+    setTimeout(novaPlay, 180);
+  }
+}
+
+/* -------- управление -------- */
+function resetGame() {
+  if (busy) return;
+  fen = START; hist = []; picked = null; lastMove = null;
+  refresh().then(maybeAutoNova);
+}
+
+function flip() { flipped = !flipped; render(); }
+
+function toggleHints() {
+  showHints = !showHints;
+  document.getElementById("btnHint").textContent = "Подсказки: " + (showHints ? "вкл" : "выкл");
+  render();
+}
+
+function setSide(s) {
+  novaSide = s;
+  ["sideW","sideB","sideN"].forEach(id => document.getElementById(id).classList.remove("pri"));
+  document.getElementById(s === "w" ? "sideW" : s === "b" ? "sideB" : "sideN").classList.add("pri");
+  render();
+  maybeAutoNova();
+}
+
+/* -------- ползунки -------- */
+let refreshTimer = null;
+
+function syncLabels() {
+  L.elo.textContent = S.elo.value;
+  L.cls.textContent = (+S.cls.value).toFixed(2);
+  L.agg.textContent = (+S.agg.value).toFixed(2);
+  L.str.textContent = (+S.str.value).toFixed(2);
+  L.shp.textContent = (+S.shp.value).toFixed(1);
+}
+
+function bindSliders() {
+  Object.values(S).forEach(el => {
+    el.addEventListener("input", () => {
+      syncLabels();
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => { if (!busy) refresh(); }, 260);
+    });
+  });
+}
+
+/* -------- старт -------- */
+bindSliders();
+syncLabels();
+setSide("n");
+refresh().then(maybeAutoNova);
+</script>
+</body>
+</html>

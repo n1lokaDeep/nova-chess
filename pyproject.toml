@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nova-chess"
+version = "1.0.0"
+description = "Шахматный движок, который играет как человек — и не зевает"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Orion" }]
+keywords = ["chess", "ai", "human-like", "engine", "nova", "stockfish"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment :: Board Games",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "chess>=1.10.0",
+    "onnxruntime>=1.16.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0.0"]
+web = ["fastapi>=0.110.0", "uvicorn[standard]>=0.29.0"]
+
+[project.scripts]
+nova-chess = "nova_chess.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/USER/nova-chess"
+Source = "https://github.com/USER/nova-chess"
+
+[tool.setuptools.packages.find]
+include = ["nova_chess*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

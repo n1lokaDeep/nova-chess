@@ -1,0 +1,48 @@
+# Модели — слишком большие для git, скачиваются отдельно
+models/
+*.onnx
+*.onnx.data
+*.pt
+*.bin
+
+# Stockfish
+stockfish/
+*.exe
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Виртуальные окружения
+venv/
+.venv/
+env/
+ENV/
+
+# Тесты и покрытие
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ОС
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Логи и временные файлы
+*.log
+*.tmp
